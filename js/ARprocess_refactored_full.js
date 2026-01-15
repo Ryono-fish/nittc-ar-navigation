@@ -36,7 +36,7 @@ const MARKERS = [
   { id: 1,  patt: "patt/NS1F.patt"  },
   { id: 2,  patt: "patt/1LB1F.patt" },
   { id: 3,  patt: "patt/E1F.patt"   },
-  { id: 4,  patt: "patt/C1F.patt"   },
+  { id: 4,  patt: "patt/CI1F.patt"   },
   { id: 5,  patt: "patt/G1F.patt"   },
   { id: 6,  patt: "patt/A1F.patt"   },
   { id: 7,  patt: "patt/SL1F.patt"  },
