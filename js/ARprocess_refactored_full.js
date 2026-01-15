@@ -108,6 +108,28 @@ renderer.domElement.style.zIndex = "2";
 
     if (source.ready !== false && context) {
       context.update(source.domElement);
+
+      // === Hold（見失い吸収）===
+      const now = (typeof performance !== \"undefined\" && performance.now) ? performance.now() : Date.now();
+      let found = null;
+      for (const m of markerGroups) {
+        if (m.group.visible) {
+          m.lastSeenAt = now;
+          m.lastMatrix.copy(m.group.matrix);
+          if (found === null) found = m.id;
+        }
+      }
+      for (const m of markerGroups) {
+        const stableVisible = (now - m.lastSeenAt) < HOLD_MS;
+        if (stableVisible && !m.group.visible) {
+          m.group.visible = true;
+          m.group.matrix.copy(m.lastMatrix);
+        }
+      }
+      if (found !== currentNode) {
+        currentNode = found;
+        if (currentNode !== null) console.log(\"[NAV] currentNode =\", currentNode);
+      }
       console.log("marker visible:", markerRoot.visible);
     }
 
