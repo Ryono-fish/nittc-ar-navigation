@@ -24,7 +24,13 @@ function AR() {
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
+   renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setClearColor(0x000000, 0);
+renderer.domElement.style.position = "absolute";
+renderer.domElement.style.top = "0px";
+renderer.domElement.style.left = "0px";
+renderer.domElement.style.zIndex = "2";
+
   document.body.appendChild(renderer.domElement);
 
   const light = new THREE.DirectionalLight(0xffffff);
