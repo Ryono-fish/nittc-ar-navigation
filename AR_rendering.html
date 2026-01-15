@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8"/>
   <meta name="viewport"
         content="width=device-width, initial-scale=1,
                  user-scalable=no, minimum-scale=1, maximum-scale=1">
@@ -64,35 +64,40 @@
   </select>
 </div>
 
-<!-- ===== 必須ライブラリ（順番厳守）===== -->
+<!-- ===== Libraries ===== -->
 
-<!-- three.js（1回だけ） -->
 <script src="js/three.min.js"></script>
-
-<!-- AR.js three.js版（THREEx を定義する） -->
-<script src="js/ar-threex.min.js"></script>
-
-
-<!-- あなたの AR 処理 -->
+<script src="https://cdn.jsdelivr.net/npm/ar.js@3.4.5/three.js/build/ar-threex.min.js"></script>
 <script src="js/ARprocess_refactored_full.js"></script>
+
+
+
 
 <!-- ===== UI / Control ===== -->
 <script>
+  // UI非表示
   function hideUI() {
     document.getElementById("ui").style.display = "none";
   }
 
+  // select変更時の処理
   function send(value) {
     console.log("destination selected:", value);
+    // 目的地（ノードID）をAR側へ渡す（ARは再起動しない）
+    if (typeof window.setGoalNode === "function") {
+      window.setGoalNode(value);
+    }
     hideUI();
   }
-
+  // イベント登録（inline onchange は使わない）
   document.getElementById("destination").addEventListener("change", function (e) {
     if (e.target.value !== "") {
       send(e.target.value);
     }
   });
 
+  // ===== AR 起動（最重要）=====
+  // AR(); // ARprocess側でload時に起動します
 </script>
 
 </body>
