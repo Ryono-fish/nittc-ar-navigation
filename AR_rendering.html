@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1,
+                 user-scalable=no, minimum-scale=1, maximum-scale=1">
+  <title>NITTC_CG2</title>
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(255,255,255,0.9);
+      padding: 10px;
+      border-radius: 8px;
+    }
+    select {
+      font-size: 20px;
+      width: 240px;
+      height: 40px;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- ===== UI ===== -->
+<div id="ui">
+  <h2>目的地を入力</h2>
+  <select id="destination">
+    <option value="">選択</option>
+    <option value="0">機械工学科棟1F</option>
+    <option value="1">北階段前1F</option>
+    <option value="2">第1講義棟1F</option>
+    <option value="3">電気電子工学科棟1F</option>
+    <option value="4">中央交差点1F</option>
+    <option value="5">一般管理棟1F</option>
+    <option value="6">建築学科棟1F</option>
+    <option value="7">南L字角1F</option>
+    <option value="8">機械工学科棟2F</option>
+    <option value="9">北階段前2F</option>
+    <option value="10">第1講義棟2F</option>
+    <option value="11">電気電子工学科棟2F</option>
+    <option value="12">中央交差点2F</option>
+    <option value="13">一般管理棟2F</option>
+    <option value="14">建築学科棟2F</option>
+    <option value="15">南L字角2F</option>
+    <option value="16">機械工学科棟3F</option>
+    <option value="17">北階段前3F</option>
+    <option value="18">第1講義棟3F</option>
+    <option value="19">電気電子工学科棟3F</option>
+    <option value="20">中央交差点3F</option>
+    <option value="21">一般管理棟3F</option>
+    <option value="22">建築学科棟3F</option>
+    <option value="23">南L字角3F</option>
+  </select>
+</div>
+
+<!-- ===== 必須ライブラリ（順番厳守）===== -->
+
+<!-- three.js（1回だけ） -->
+<script src="js/three.min.js"></script>
+
+<!-- AR.js three.js版（THREEx を定義する） -->
+<script src="js/ar-threex.min.js"></script>
+
+
+<!-- あなたの AR 処理 -->
+<script src="js/ARprocess_refactored_full.js"></script>
+
+<!-- ===== UI / Control ===== -->
+<script>
+  function hideUI() {
+    document.getElementById("ui").style.display = "none";
+  }
+
+  function send(value) {
+    console.log("destination selected:", value);
+    hideUI();
+  }
+
+  document.getElementById("destination").addEventListener("change", function (e) {
+    if (e.target.value !== "") {
+      send(e.target.value);
+    }
+  });
+
+</script>
+
+</body>
+</html>

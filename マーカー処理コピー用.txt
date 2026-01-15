@@ -1,0 +1,319 @@
+マーカー処理コピー用
+//-------------------------------
+// ( 1.patt marker and .JSON)
+//-------------------------------
+// marker
+var marker1 = new THREE.Group();                      // create marker as a group
+var controls = new THREEx.ArMarkerControls(context, marker1, {    // register marker
+  type: "pattern",                                    // marker type
+  patternUrl: "patt/1.patt",                           // marker file
+});
+scene.add(marker1);                                   // add marker into scene
+// model (mesh)
+var mesh1;                                            // a box to put model
+var loader = new THREE.JSONLoader();                  // loader to include json model
+console.log(Route_data[1]);
+switch (Route_data[1]){
+  case "0"://不使用
+  //loader.load("arrow/arrow_forward.json", function(geo, mat) {       // include model
+    // make json file using Blender export function
+    // exporter of Blender is in three.js_master_utils/exporters/addons/io_three 
+    mesh1 = new THREE.Mesh(geometry, material);                // mesh
+    mesh1.name = "patt1";                              // mesh name (use it at picking)
+    //mesh1.scale.set(0.1, 0.1, 0.1);                     // initial size (in kind matching)
+    mesh1.position.set(0, 0.3, 0);                          // initial position (in kind matching)
+    mesh1.rotation.set(Math.PI * 3 / 2, 0, 0);
+    
+    marker1.add(mesh1);                                 // add mesh into marker
+  //});
+  break;
+  case "1":
+        mesh1 = new THREE.Mesh(geometry, material);
+        mesh1.name = "patt1";
+        mesh1.scale.y = Route_cost[26] * a;
+        mesh1.position.set(0, 0.3, 0);
+        mesh1.rotation.set(Math.PI * 3 / 2, 0, Math.PI * 3 / 2);
+
+        let lastMarkerVisible1_1 = false;
+        let markerLostHandled1_1 = false;
+        let lastMarkerPosition1_1 = new THREE.Vector3();
+        let lastMarkerQuaternion1_1 = new THREE.Quaternion();
+        let lastMarkerScale1_1 = new THREE.Vector3();
+
+        let first1_1 = true;
+        let shrinking1_1 = false;
+        let shrinkRate1_1 = 0.01;
+        let shrinkingInterval1_1;
+        let markerFoundInterval1_1;
+
+        function logEvent(event) {
+            console.log(`Event: ${event}`);
+        }
+
+        function markerFound1_1() {
+            logEvent("markerFound");
+
+            mesh1.position.set(0, 0.3, 0);
+            mesh1.rotation.set(Math.PI * 3 / 2, 0, Math.PI * 3 / 2);
+
+            marker1.add(mesh1);
+            marker1.updateMatrixWorld(true);
+            mesh1.updateMatrixWorld(true);
+            lastMarkerPosition1_1.setFromMatrixPosition(mesh1.matrixWorld);
+            lastMarkerQuaternion1_1.setFromRotationMatrix(mesh1.matrixWorld);
+            mesh1.matrixWorld.decompose(lastMarkerPosition1_1, lastMarkerQuaternion1_1, lastMarkerScale1_1);
+
+            first1_1 = false;
+            shrinking1_1 = false;
+        }
+
+        function animate1_1() {
+            requestAnimationFrame(animate1_1);
+            if (source.ready !== false) {
+                context.update(source.domElement);
+            }
+
+            const markerVisible1_1 = marker1.visible;
+
+            if (markerVisible1_1 && !lastMarkerVisible1_1 && first1_1) {
+                markerFound1_1();
+                markerFoundInterval1_1 = setInterval(markerFound1_1, 500);
+            } else if (!markerVisible1_1 && lastMarkerVisible1_1) {
+                logEvent("markerLost");
+                clearInterval(markerFoundInterval1_1);
+
+                mesh1.matrixAutoUpdate = false;
+                mesh1.position.copy(lastMarkerPosition1_1);
+                mesh1.quaternion.copy(lastMarkerQuaternion1_1);
+                mesh1.scale.copy(lastMarkerScale1_1);
+                mesh1.updateMatrix();
+                scene.add(mesh1);
+
+                if (shrinkingInterval1_1) {
+                    clearInterval(shrinkingInterval1_1);
+                }
+                shrinkingInterval1_1 = setInterval(() => {
+                    if (mesh1.scale.y > 0.01) {
+                        mesh1.scale.y -= shrinkRate1_1;
+                        mesh1.updateMatrix();
+                    } else {
+                        clearInterval(shrinkingInterval1_1);
+                        scene.remove(mesh1);
+                        shrinking1_1 = false;
+                        markerLostHandled1_1 = true;
+                    }
+                }, 10);
+            }
+
+            lastMarkerVisible1_1 = markerVisible1_1;
+            renderer.render(scene, camera);
+        }
+        animate1_1();
+
+  break;
+  case "2":
+        mesh1 = new THREE.Mesh(geometry, material);
+        mesh1.name = "patt1";
+        mesh1.scale.y = Route_cost[18] * a;
+        mesh1.position.set(0, 0.3, 0);
+        mesh1.rotation.set(Math.PI * 3 / 2, 0, Math.PI);
+
+        let lastMarkerVisible1_2 = false;
+        let markerLostHandled1_2 = false;
+        let lastMarkerPosition1_2 = new THREE.Vector3();
+        let lastMarkerQuaternion1_2 = new THREE.Quaternion();
+        let lastMarkerScale1_2 = new THREE.Vector3();
+
+        let first1_2 = true;
+        let shrinking1_2 = false;
+        let shrinkRate1_2 = 0.01;
+        let shrinkingInterval1_2;
+        let markerFoundInterval1_2;
+
+        function logEvent(event) {
+            console.log(`Event: ${event}`);
+        }
+
+        function markerFound1_2() {
+            logEvent("markerFound");
+
+            mesh1.position.set(0, 0.3, 0);
+            mesh1.rotation.set(Math.PI * 3 / 2, 0, Math.PI);
+
+            marker1.add(mesh1);
+            marker1.updateMatrixWorld(true);
+            mesh1.updateMatrixWorld(true);
+            lastMarkerPosition1_2.setFromMatrixPosition(mesh1.matrixWorld);
+            lastMarkerQuaternion1_2.setFromRotationMatrix(mesh1.matrixWorld);
+            mesh1.matrixWorld.decompose(lastMarkerPosition1_2, lastMarkerQuaternion1_2, lastMarkerScale1_2);
+
+            first1_2 = false;
+            shrinking1_2 = false;
+        }
+
+        function animate1_2() {
+            requestAnimationFrame(animate1_2);
+            if (source.ready !== false) {
+                context.update(source.domElement);
+            }
+
+            const markerVisible1_2 = marker1.visible;
+
+            if (markerVisible1_2 && !lastMarkerVisible1_2 && first1_2) {
+                markerFound1_2();
+                markerFoundInterval1_2 = setInterval(markerFound1_2, 500);
+            } else if (!markerVisible1_2 && lastMarkerVisible1_2) {
+                logEvent("markerLost");
+                clearInterval(markerFoundInterval1_2);
+
+                mesh1.matrixAutoUpdate = false;
+                mesh1.position.copy(lastMarkerPosition1_2);
+                mesh1.quaternion.copy(lastMarkerQuaternion1_2);
+                mesh1.scale.copy(lastMarkerScale1_2);
+                mesh1.updateMatrix();
+                scene.add(mesh1);
+
+                if (shrinkingInterval1_2) {
+                    clearInterval(shrinkingInterval1_2);
+                }
+                shrinkingInterval1_2 = setInterval(() => {
+                    if (mesh1.scale.y > 0.01) {
+                        mesh1.scale.y -= shrinkRate1_2;
+                        mesh1.updateMatrix();
+                    } else {
+                        clearInterval(shrinkingInterval1_2);
+                        scene.remove(mesh1);
+                        shrinking1_2 = false;
+                        markerLostHandled1_2 = true;
+                    }
+                }, 10);
+            }
+
+            lastMarkerVisible1_2 = markerVisible1_2;
+            renderer.render(scene, camera);
+        }
+        animate1_2();
+  break;
+  case "3"://不使用
+  //loader.load("arrow/left.json", function(geo, mat) {       // include model
+        mesh1 = new THREE.Mesh(geometry, material);
+        mesh1.name = "patt1";
+        //mesh1.scale.y = Route_cost[0] * a;
+        mesh1.position.set(0, 0.3, 0);
+        mesh1.rotation.set(Math.PI * 3 / 2, 0, Math.PI / 2);
+
+        let lastMarkerVisible1_3 = false;
+        let markerLostHandled1_3 = false;
+        let lastMarkerPosition1_3 = new THREE.Vector3();
+        let lastMarkerQuaternion1_3 = new THREE.Quaternion();
+        let lastMarkerScale1_3 = new THREE.Vector3();
+
+        let first1_3 = true;
+        let shrinking1_3 = false;
+        let shrinkRate1_3 = 0.01;
+        let shrinkingInterval1_3;
+        let markerFoundInterval1_3;
+
+        function logEvent(event) {
+            console.log(`Event: ${event}`);
+        }
+
+        function markerFound1_3() {
+            logEvent("markerFound");
+
+            mesh1.position.set(0, 0.3, 0);
+            mesh1.rotation.set(Math.PI * 3 / 2, 0, Math.PI / 2);
+
+            marker1.add(mesh1);
+            marker1.updateMatrixWorld(true);
+            mesh1.updateMatrixWorld(true);
+            lastMarkerPosition1_3.setFromMatrixPosition(mesh1.matrixWorld);
+            lastMarkerQuaternion1_3.setFromRotationMatrix(mesh1.matrixWorld);
+            mesh1.matrixWorld.decompose(lastMarkerPosition1_3, lastMarkerQuaternion1_3, lastMarkerScale1_3);
+
+            first1_3 = false;
+            shrinking1_3 = false;
+        }
+
+        function animate1_3() {
+            requestAnimationFrame(animate1_3);
+            if (source.ready !== false) {
+                context.update(source.domElement);
+            }
+
+            const markerVisible1_3 = marker1.visible;
+
+            if (markerVisible1_3 && !lastMarkerVisible1_3 && first1_3) {
+                markerFound1_3();
+                markerFoundInterval1_3 = setInterval(markerFound1_3, 500);
+            } else if (!markerVisible1_3 && lastMarkerVisible1_3) {
+                logEvent("markerLost");
+                clearInterval(markerFoundInterval1_3);
+
+                mesh1.matrixAutoUpdate = false;
+                mesh1.position.copy(lastMarkerPosition1_3);
+                mesh1.quaternion.copy(lastMarkerQuaternion1_3);
+                mesh1.scale.copy(lastMarkerScale1_3);
+                mesh1.updateMatrix();
+                scene.add(mesh1);
+
+                if (shrinkingInterval1_3) {
+                    clearInterval(shrinkingInterval1_3);
+                }
+                shrinkingInterval1_3 = setInterval(() => {
+                    if (mesh1.scale.y > 0.01) {
+                        mesh1.scale.y -= shrinkRate1_3;
+                        mesh1.updateMatrix();
+                    } else {
+                        clearInterval(shrinkingInterval1_3);
+                        scene.remove(mesh1);
+                        shrinking1_3 = false;
+                        markerLostHandled1_3 = true;
+                    }
+                }, 10);
+            }
+
+            lastMarkerVisible1_3 = markerVisible1_3;
+            renderer.render(scene, camera);
+        }
+        animate1_3();
+  break;
+  case "4":
+  loader.load("arrow/up_stair.json", function(geo, mat) {       // include model
+    mesh1 = new THREE.Mesh(geo, mat[0]);                // mesh
+    mesh1.name = "patt1";                              // mesh name (use it at picking)
+    mesh1.scale.set(0.3, 0.3, 0.3);                     // initial size (in kind matching)
+    mesh1.position.set(0, 0.3, 0);                      // initial position (in kind matching)
+    
+    marker1.add(mesh1);                                 // add mesh into marker
+  });
+  break;
+  case "5"://不使用
+  loader.load("arrow/down_stair.json", function(geo, mat) {       // include model
+    mesh1 = new THREE.Mesh(geo, mat[0]);                // mesh
+    mesh1.name = "patt1";                              // mesh name (use it at picking)
+    mesh1.scale.set(0.3, 0.3, 0.3);                     // initial size (in kind matching)
+    mesh1.position.set(0, 0.3, 0);                      // initial position (in kind matching)
+    
+    marker1.add(mesh1);                                 // add mesh into marker
+  });
+  break;
+  case "-1":
+  loader.load("arrow/goal.json", function(geo, mat) {
+    mesh1 = new THREE.Mesh(geo, mat[0]);
+    mesh1.name = "patt1";
+    mesh1.scale.set(1, 1, 1);
+    mesh1.position.set(0, 0.6, 0);
+    
+      marker1.add(mesh1);
+
+      /*function animate1_g() {
+          requestAnimationFrame(animate1_g);
+          mesh1.rotation.y -= 0.003 * Math.PI;//GOAL図形の回転アニメーション処理
+          renderer.render(scene, camera);
+      }
+      animate1_g();
+      */
+  });
+  break;
+}

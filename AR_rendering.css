@@ -1,0 +1,16 @@
+h1{
+    font-family: 'Times New Roman', Times, serif;
+    font-size:20px;
+}
+p{
+    font-family: Meiryo;
+}
+div{
+    background:  lightgreen;
+    width: 300px;
+    padding: 3px;
+    text-align: center;
+    border: 1px solid #cccccc;
+    margin: 15px auto;
+    z-index : 9998;
+}
