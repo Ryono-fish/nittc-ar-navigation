@@ -119,7 +119,15 @@ function parseOBJ(text) {
   }
 
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  // three.js r8x compatibility: setAttribute may not exist
+  const posArray = new Float32Array(positions);
+  if (typeof geo.setAttribute === "function") {
+    geo.setAttribute("position", new THREE.BufferAttribute(posArray, 3));
+  } else if (typeof geo.addAttribute === "function") {
+    geo.addAttribute("position", new THREE.BufferAttribute(posArray, 3));
+  } else {
+    throw new Error("BufferGeometry attribute API not found");
+  }
   geo.computeVertexNormals();
   geo.computeBoundingBox();
   geo.computeBoundingSphere();
