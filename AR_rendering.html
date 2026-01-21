@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8">
+  <meta charset="utf-8"/>
   <meta name="viewport"
         content="width=device-width, initial-scale=1,
                  user-scalable=no, minimum-scale=1, maximum-scale=1">
@@ -33,13 +33,18 @@
 <body>
 
 <!-- ===== UI ===== -->
+<div id="nav" style="position:fixed; left:10px; bottom:10px; z-index:9999;
+  background:rgba(0,0,0,.65); color:#fff; padding:10px 12px; border-radius:10px; font-size:16px; max-width:90vw;">
+  ナビ：目的地を選択してください
+</div>
 <div id="ui">
   <h2>目的地を入力</h2>
   <select id="destination">
+    
     <option value="">選択</option>
     <option value="0">機械工学科棟1F</option>
     <option value="1">北階段前1F</option>
-    <option value="2">第1講義棟1F</option>
+    <option value="2">第一講義棟1F</option>
     <option value="3">電気電子工学科棟1F</option>
     <option value="4">中央交差点1F</option>
     <option value="5">一般管理棟1F</option>
@@ -47,7 +52,7 @@
     <option value="7">南L字角1F</option>
     <option value="8">機械工学科棟2F</option>
     <option value="9">北階段前2F</option>
-    <option value="10">第1講義棟2F</option>
+    <option value="10">第一講義棟2F</option>
     <option value="11">電気電子工学科棟2F</option>
     <option value="12">中央交差点2F</option>
     <option value="13">一般管理棟2F</option>
@@ -55,50 +60,52 @@
     <option value="15">南L字角2F</option>
     <option value="16">機械工学科棟3F</option>
     <option value="17">北階段前3F</option>
-    <option value="18">第1講義棟3F</option>
+    <option value="18">第一講義棟3F</option>
     <option value="19">電気電子工学科棟3F</option>
     <option value="20">中央交差点3F</option>
     <option value="21">一般管理棟3F</option>
     <option value="22">建築学科棟3F</option>
     <option value="23">南L字角3F</option>
+  
   </select>
 </div>
 
-<!-- ===== 必須ライブラリ（順番厳守）===== -->
+<!-- ===== Libraries ===== -->
 
-<!-- three.js（1回だけ） -->
-<!-- AR.js three.js版（THREEx を定義する） -->
-<!-- あなたの AR 処理 -->
+<script src="js/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ar.js@3.4.5/three.js/build/ar-threex.min.js"></script>
+<script src="js/ARprocess_refactored_full.js"></script>
+
+
+
+
 <!-- ===== UI / Control ===== -->
 <script>
+  // UI非表示
   function hideUI() {
     document.getElementById("ui").style.display = "none";
   }
 
+  // select変更時の処理
   function send(value) {
     console.log("destination selected:", value);
-    if (typeof window.setGoalNode === "function") window.setGoalNode(value);
-    if (typeof hideUI === "function") hideUI();
+
+    // 例：Route_data をここで変更する
+    // Route_data = [...];
+
+    hideUI();
   }
+
+  // イベント登録（inline onchange は使わない）
   document.getElementById("destination").addEventListener("change", function (e) {
     if (e.target.value !== "") {
       send(e.target.value);
     }
   });
 
+  // ===== AR 起動（最重要）=====
+  AR();
 </script>
-
-
-<!-- ===== 必須ライブラリ（順番厳守）===== -->
-<script src="js/three.min.js"></script>
-<script src="js/ar-threex.min.js"></script>
-<script>
-  if (!window.THREEx) {
-    console.error("THREEx is not defined. js/ar-threex.min.js が 404 になっていないか、読み込み順が正しいか確認してください。");
-  }
-</script>
-<script src="js/ARprocess_refactored_full.js?v=999"></script>
-
 
 </body>
 </html>
