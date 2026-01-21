@@ -37,10 +37,10 @@
   background:rgba(0,0,0,.65); color:#fff; padding:10px 12px; border-radius:10px; font-size:16px; max-width:90vw;">
   ナビ：目的地を選択してください
 </div>
+
 <div id="ui">
   <h2>目的地を入力</h2>
   <select id="destination">
-    
     <option value="">選択</option>
     <option value="0">機械工学科棟1F</option>
     <option value="1">北階段前1F</option>
@@ -66,58 +66,45 @@
     <option value="21">一般管理棟3F</option>
     <option value="22">建築学科棟3F</option>
     <option value="23">南L字角3F</option>
-  
   </select>
 </div>
 
-<!-- ===== Libraries ===== -->
-
-
+<!-- ===== Libraries（ローカルで固定：404回避） ===== -->
 <script src="js/three.min.js"></script>
-
-<!-- ★ ここを修正：npm/ar.js ではなく gh/AR.js を参照 -->
-<script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/three.js/build/ar-threex.min.js"></script>
-
-<!-- Route を先に（Routeをwindow.Routeで使う想定） -->
+<script src="js/ar-threex.min.js"></script>
 <script src="js/route.js"></script>
-
-<!-- メイン処理 -->
 <script src="js/ARprocess_refactored_full.js"></script>
-
-
-
 
 <!-- ===== UI / Control ===== -->
 <script>
-  // UI非表示
   function hideUI() {
     document.getElementById("ui").style.display = "none";
   }
 
-  // select変更時の処理
-  function send(value) {
-    console.log("destination selected:", value);
-
-    // 例：Route_data をここで変更する
-    // Route_data = [...];
-
-    hideUI();
+  function setNavText(txt){
+    const el = document.getElementById("nav");
+    if (el) el.textContent = txt;
   }
 
-  // イベント登録（inline onchange は使わない）
   document.getElementById("destination").addEventListener("change", function (e) {
-    if (e.target.value !== "") {
-      send(e.target.value);
-    }
-  });
-  
-  console.log("THREE:", !!window.THREE);
-  console.log("THREEx:", window.THREEx);
-  console.log("Route:", window.Route);
-</script>
+    if (e.target.value === "") return;
 
-  // ===== AR 起動（最重要）=====
-  AR();
+    const goalId = Number(e.target.value);
+
+    // ★ AR側の goalNodeId を確実にセット（改善1）
+    if (typeof window.setGoalNode === "function") {
+      window.setGoalNode(goalId);
+    } else {
+      console.warn("setGoalNode is not available yet.");
+      setNavText("ナビ：目的地を設定できません（setGoalNode未定義）");
+      return;
+    }
+
+    hideUI();
+  });
+
+  // 最初の表示
+  setNavText("ナビ：目的地を選択してください");
 </script>
 
 </body>
