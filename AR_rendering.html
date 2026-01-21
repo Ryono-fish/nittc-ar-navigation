@@ -32,6 +32,22 @@
 
 <body>
 
+<!-- ===== HUD ===== -->
+<div id="goalHud" style="
+  position: fixed;
+  right: 10px;
+  top: 10px;
+  z-index: 10000;
+  background: rgba(0,0,0,.65);
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 16px;
+  max-width: 90vw;
+">
+  目的地：未選択
+</div>
+
 <!-- ===== UI ===== -->
 <div id="nav" style="position:fixed; left:10px; bottom:10px; z-index:9999;
   background:rgba(0,0,0,.65); color:#fff; padding:10px 12px; border-radius:10px; font-size:16px; max-width:90vw;">
@@ -69,7 +85,7 @@
   </select>
 </div>
 
-<!-- ===== Libraries（ローカルで固定：404回避） ===== -->
+<!-- ===== Libraries（ローカルで固定） ===== -->
 <script src="js/three.min.js"></script>
 <script src="js/ar-threex.min.js"></script>
 <script src="js/route.js"></script>
@@ -91,7 +107,7 @@
 
     const goalId = Number(e.target.value);
 
-    // ★ AR側の goalNodeId を確実にセット（改善1）
+    // AR側の goalNodeId を確実にセット
     if (typeof window.setGoalNode === "function") {
       window.setGoalNode(goalId);
     } else {
