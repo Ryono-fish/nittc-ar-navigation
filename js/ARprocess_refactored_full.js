@@ -4,7 +4,8 @@
  ✅ 複数マーカー対応（MarkerMap: patt名→nodeId を使用）
  ✅ 目的地選択 → 最短経路(Route.dijkstra) → 次ノード方向を矢印で表示
  ✅ 表示安定化：見失っても一定時間は表示を保持（ホールド）
- ✅ 初期化順序：ArToolkitSource → ArToolkitContext → MarkerControls
+ ✅ 到着時演出：GOAL表示（矢印OFF）
+ ✅ 矢印は地面に水平（-90°寝かせ、Y回転のみ）
 */
 
 if (!window.THREE) console.error("THREE is not defined. three.min.js の読み込み順を確認してください。");
@@ -21,9 +22,10 @@ const lastMatrix = new Map();     // nodeId -> THREE.Matrix4
 let currentNodeId = null;
 let goalNodeId = null;
 
-// 矢印表示用（現在地マーカーの座標に追従）
+// 表示用（現在地マーカーの座標に追従）
 let holdGroup = null;
 let arrowGroup = null;
+let goalObj = null; // ★ GOAL演出
 
 function setNavText(text) {
   const el = document.getElementById("nav");
@@ -32,12 +34,15 @@ function setNavText(text) {
 
 // 目的地セット（HTMLから呼ばれる）
 window.setGoalNode = function (nodeId) {
-  goalNodeId = (typeof nodeId === "number") ? nodeId : null;
+  // ★ 文字列でも数値化して保持（改善1）
+  const n = Number(nodeId);
+  goalNodeId = Number.isFinite(n) ? n : null;
+
   if (goalNodeId == null) {
     setNavText("ナビ：目的地を選択してください");
   } else {
     const name = window.Route?.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
-    setNavText(`ナビ：目的地「${name}」`);
+    setNavText(`ナビ：目的地「${name}」を設定しました。マーカーを映してください`);
   }
 };
 
@@ -59,19 +64,55 @@ function makeArrowMesh() {
   head.position.y = 0.75;
   group.add(head);
 
-  // 全体を少し浮かせる
-  group.position.y = 0.1;
+  // ★ 矢印を地面に水平に寝かせる（改善3）
+  // もともとY方向に伸びてるので、X軸に-90°回してXZ平面に寝かせる
+  group.rotation.x = -Math.PI / 2;
+
+  // 全体を少し浮かせる（地面に埋まるの防止）
+  group.position.y = 0.08;
+
   return group;
+}
+
+function makeGoalSprite() {
+  // ★ 軽い GOAL 演出（Sprite）
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "rgba(0,0,0,0.45)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.font = "bold 120px sans-serif";
+  ctx.fillStyle = "white";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("GOAL", canvas.width / 2, canvas.height / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+  const sprite = new THREE.Sprite(material);
+
+  sprite.scale.set(1.2, 0.6, 1);
+  sprite.position.set(0, 0.35, 0); // 少し上に
+  sprite.visible = false;
+  return sprite;
 }
 
 function applyDirectionToArrow(dir) {
   if (!arrowGroup) return;
 
-  // いったん初期化
-  arrowGroup.rotation.set(0, 0, 0);
+  // 到着などで方向無しなら何もしない
+  if (dir == null) return;
+
+  // ★ 矢印は「寝かせた状態」を維持しつつ、Y回転だけ変える（改善3）
+  // いったんY回転だけ初期化
+  arrowGroup.rotation.y = 0;
 
   // GS.cppのdirec/dirHint: 0上 1右 2下 3左 4下階 5上階
-  // マーカー座標系でYが上として、Y軸回転で水平方向を表す。
+  // ※同一フロア限定なら 0〜3 だけでOK。4/5は将来用に残す。
   switch (dir) {
     case 0: // 上（前）
       arrowGroup.rotation.y = 0;
@@ -85,11 +126,11 @@ function applyDirectionToArrow(dir) {
     case 3: // 左
       arrowGroup.rotation.y = Math.PI / 2;
       break;
-    case 5: // 上階
-      arrowGroup.rotation.x = -Math.PI / 5;
+    case 5: // 上階（演出用：少し立てる）
+      arrowGroup.rotation.x = -Math.PI / 2 - Math.PI / 6;
       break;
-    case 4: // 下階
-      arrowGroup.rotation.x = Math.PI / 5;
+    case 4: // 下階（演出用：少し立てる）
+      arrowGroup.rotation.x = -Math.PI / 2 + Math.PI / 6;
       break;
     default:
       break;
@@ -172,7 +213,7 @@ function AR() {
         });
       }
 
-      // --- 矢印（ホールド表示） ---
+      // --- 表示（ホールド） ---
       holdGroup = new THREE.Group();
       holdGroup.matrixAutoUpdate = false;
       holdGroup.visible = false;
@@ -180,6 +221,10 @@ function AR() {
 
       arrowGroup = makeArrowMesh();
       holdGroup.add(arrowGroup);
+
+      // ★ GOAL 演出
+      goalObj = makeGoalSprite();
+      holdGroup.add(goalObj);
 
       console.log("[AR] initialized. markers =", markerRoots.size);
 
@@ -202,7 +247,6 @@ function AR() {
               lastMatrix.get(nodeId).copy(root.matrix);
             }
             const seen = lastSeenAt.get(nodeId) ?? -Infinity;
-            // いま見えてるものを優先（seen=now）し、同点なら最後に見えたもの
             if (root.visible && seen >= bestSeen) {
               bestSeen = seen;
               bestId = nodeId;
@@ -221,41 +265,64 @@ function AR() {
 
           currentNodeId = bestId;
 
-          // 矢印表示更新
+          // 表示更新
           if (currentNodeId != null) {
             const stableVisible = (now - (lastSeenAt.get(currentNodeId) ?? -Infinity)) < HOLD_MS;
             if (stableVisible) {
               holdGroup.visible = true;
               holdGroup.matrix.copy(lastMatrix.get(currentNodeId));
 
-              // ナビ計算（同一フロア限定）
-              if (goalNodeId != null && window.Route) {
-                const path = window.Route.dijkstra(currentNodeId, goalNodeId, true);
-                if (!path) {
-                  setNavText("ナビ：同一フロアで経路が見つかりません");
-                } else {
-                  const next = window.Route.nextNode(path, currentNodeId);
-                  if (next == null) {
-                    const goalName = window.Route.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
-                    setNavText(`ナビ：目的地「${goalName}」に到達！`);
-                    applyDirectionToArrow(null);
-                  } else {
-                    const dir = window.Route.dirHintBetween(currentNodeId, next);
-                    const nextName = window.Route.NodeMeta?.[next]?.name ?? `Node ${next}`;
-                    setNavText(`ナビ：次は「${nextName}」へ`);
-                    applyDirectionToArrow(dir);
-                  }
-                }
-              } else {
+              // 目的地未選択
+              if (goalNodeId == null || !window.Route) {
                 const curName = window.Route?.NodeMeta?.[currentNodeId]?.name ?? `Node ${currentNodeId}`;
                 setNavText(`ナビ：現在地「${curName}」 / 目的地未選択`);
+                arrowGroup.visible = true;
+                goalObj.visible = false;
+              } else {
+                // ★ 到着判定（改善2）
+                if (currentNodeId === goalNodeId) {
+                  const goalName = window.Route.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
+                  setNavText(`ナビ：目的地「${goalName}」に到達！`);
+                  arrowGroup.visible = false;
+                  goalObj.visible = true;
+                } else {
+                  // ナビ計算（同一フロア限定）
+                  const path = window.Route.dijkstra(currentNodeId, goalNodeId, true);
+                  if (!path) {
+                    setNavText("ナビ：同一フロアで経路が見つかりません");
+                    arrowGroup.visible = false;
+                    goalObj.visible = false;
+                  } else {
+                    const next = window.Route.nextNode(path, currentNodeId);
+                    if (next == null) {
+                      // 念のため（到着扱い）
+                      const goalName = window.Route.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
+                      setNavText(`ナビ：目的地「${goalName}」に到達！`);
+                      arrowGroup.visible = false;
+                      goalObj.visible = true;
+                    } else {
+                      const dir = window.Route.dirHintBetween(currentNodeId, next);
+                      const nextName = window.Route.NodeMeta?.[next]?.name ?? `Node ${next}`;
+                      setNavText(`ナビ：次は「${nextName}」へ`);
+                      arrowGroup.visible = true;
+                      goalObj.visible = false;
+
+                      // 矢印は水平のままY回転で方向を示す
+                      // （階移動dirは演出で少し傾ける）
+                      // 寝かせ角度が変わる可能性があるのでここで補正
+                      arrowGroup.rotation.x = -Math.PI / 2;
+                      applyDirectionToArrow(dir);
+                    }
+                  }
+                }
               }
             } else {
               holdGroup.visible = false;
             }
           } else {
             holdGroup.visible = false;
-            setNavText("ナビ：マーカーを映してください");
+            if (goalNodeId == null) setNavText("ナビ：目的地を選択してください");
+            else setNavText("ナビ：マーカーを映してください");
           }
         }
 
@@ -269,4 +336,12 @@ function AR() {
   window.addEventListener("resize", onResize);
 }
 
-window.addEventListener("load", AR);
+// グローバルにも生やしておく（デバッグ用）
+window.AR = AR;
+
+// ★ 二重起動防止：loadで一回だけ起動
+window.addEventListener("load", () => {
+  // THREExが無い場合は起動しても落ちるので止める
+  if (!window.THREEx || !window.THREE) return;
+  AR();
+});
