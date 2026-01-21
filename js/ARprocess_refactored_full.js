@@ -25,24 +25,30 @@ let goalNodeId = null;
 // 表示用（現在地マーカーの座標に追従）
 let holdGroup = null;
 let arrowGroup = null;
-let goalObj = null; // ★ GOAL演出
+let goalObj = null; // GOAL演出
 
 function setNavText(text) {
   const el = document.getElementById("nav");
   if (el) el.textContent = text;
 }
 
+function setGoalHudText(text) {
+  const el = document.getElementById("goalHud");
+  if (el) el.textContent = text;
+}
+
 // 目的地セット（HTMLから呼ばれる）
 window.setGoalNode = function (nodeId) {
-  // ★ 文字列でも数値化して保持（改善1）
   const n = Number(nodeId);
   goalNodeId = Number.isFinite(n) ? n : null;
 
   if (goalNodeId == null) {
     setNavText("ナビ：目的地を選択してください");
+    setGoalHudText("目的地：未選択");
   } else {
     const name = window.Route?.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
     setNavText(`ナビ：目的地「${name}」を設定しました。マーカーを映してください`);
+    setGoalHudText(`目的地：${name}`);
   }
 };
 
@@ -64,8 +70,7 @@ function makeArrowMesh() {
   head.position.y = 0.75;
   group.add(head);
 
-  // ★ 矢印を地面に水平に寝かせる（改善3）
-  // もともとY方向に伸びてるので、X軸に-90°回してXZ平面に寝かせる
+  // 矢印を地面に水平に寝かせる
   group.rotation.x = -Math.PI / 2;
 
   // 全体を少し浮かせる（地面に埋まるの防止）
@@ -75,7 +80,6 @@ function makeArrowMesh() {
 }
 
 function makeGoalSprite() {
-  // ★ 軽い GOAL 演出（Sprite）
   const canvas = document.createElement("canvas");
   canvas.width = 512;
   canvas.height = 256;
@@ -96,23 +100,18 @@ function makeGoalSprite() {
   const sprite = new THREE.Sprite(material);
 
   sprite.scale.set(1.2, 0.6, 1);
-  sprite.position.set(0, 0.35, 0); // 少し上に
+  sprite.position.set(0, 0.35, 0);
   sprite.visible = false;
   return sprite;
 }
 
 function applyDirectionToArrow(dir) {
   if (!arrowGroup) return;
-
-  // 到着などで方向無しなら何もしない
   if (dir == null) return;
 
-  // ★ 矢印は「寝かせた状態」を維持しつつ、Y回転だけ変える（改善3）
-  // いったんY回転だけ初期化
+  // Y回転だけ初期化
   arrowGroup.rotation.y = 0;
 
-  // GS.cppのdirec/dirHint: 0上 1右 2下 3左 4下階 5上階
-  // ※同一フロア限定なら 0〜3 だけでOK。4/5は将来用に残す。
   switch (dir) {
     case 0: // 上（前）
       arrowGroup.rotation.y = 0;
@@ -126,10 +125,10 @@ function applyDirectionToArrow(dir) {
     case 3: // 左
       arrowGroup.rotation.y = Math.PI / 2;
       break;
-    case 5: // 上階（演出用：少し立てる）
+    case 5: // 上階（演出用）
       arrowGroup.rotation.x = -Math.PI / 2 - Math.PI / 6;
       break;
-    case 4: // 下階（演出用：少し立てる）
+    case 4: // 下階（演出用）
       arrowGroup.rotation.x = -Math.PI / 2 + Math.PI / 6;
       break;
     default:
@@ -157,7 +156,7 @@ function AR() {
   light.position.set(0, 0, 2);
   scene.add(light);
 
-  // --- AR.js source ---
+  // AR.js source
   source = new THREEx.ArToolkitSource({ sourceType: "webcam" });
 
   function onResize() {
@@ -176,7 +175,7 @@ function AR() {
   source.init(() => {
     onResize();
 
-    // --- AR.js context ---
+    // AR.js context
     context = new THREEx.ArToolkitContext({
       cameraParametersUrl: "camera_para.dat",
       detectionMode: "mono"
@@ -187,11 +186,10 @@ function AR() {
 
       camera.projectionMatrix.copy(context.getProjectionMatrix());
 
-      // --- マーカーを全部登録 ---
+      // マーカー登録
       const markerMap = window.Route?.MarkerMap || {};
       const ids = Object.values(markerMap);
 
-      // nodeId -> markerRoot
       const markerRoots = new Map();
 
       for (const nodeId of ids) {
@@ -202,7 +200,6 @@ function AR() {
         markerRoots.set(nodeId, root);
         lastMatrix.set(nodeId, new THREE.Matrix4());
 
-        // pattファイル名を探す（MarkerMapは patt名→id なので逆引き）
         const pattName = Object.keys(markerMap).find(k => markerMap[k] === nodeId);
         if (!pattName) continue;
 
@@ -213,7 +210,7 @@ function AR() {
         });
       }
 
-      // --- 表示（ホールド） ---
+      // 表示（ホールド）
       holdGroup = new THREE.Group();
       holdGroup.matrixAutoUpdate = false;
       holdGroup.visible = false;
@@ -222,13 +219,14 @@ function AR() {
       arrowGroup = makeArrowMesh();
       holdGroup.add(arrowGroup);
 
-      // ★ GOAL 演出
       goalObj = makeGoalSprite();
       holdGroup.add(goalObj);
 
+      // HUD初期化（HTML側が無い場合もあるので安全に）
+      setGoalHudText(goalNodeId == null ? "目的地：未選択" : `目的地：${goalNodeId}`);
+
       console.log("[AR] initialized. markers =", markerRoots.size);
 
-      // --- animate ---
       function animate() {
         requestAnimationFrame(animate);
 
@@ -237,7 +235,6 @@ function AR() {
 
           const now = (performance && performance.now) ? performance.now() : Date.now();
 
-          // 現在見えているマーカーを選ぶ（最後に見えたもの優先）
           let bestId = null;
           let bestSeen = -Infinity;
 
@@ -253,7 +250,6 @@ function AR() {
             }
           }
 
-          // 見えてない場合は「ホールド中の候補」から選ぶ
           if (bestId == null) {
             for (const [nodeId, seen] of lastSeenAt.entries()) {
               if ((now - seen) < HOLD_MS && seen > bestSeen) {
@@ -265,28 +261,24 @@ function AR() {
 
           currentNodeId = bestId;
 
-          // 表示更新
           if (currentNodeId != null) {
             const stableVisible = (now - (lastSeenAt.get(currentNodeId) ?? -Infinity)) < HOLD_MS;
             if (stableVisible) {
               holdGroup.visible = true;
               holdGroup.matrix.copy(lastMatrix.get(currentNodeId));
 
-              // 目的地未選択
               if (goalNodeId == null || !window.Route) {
                 const curName = window.Route?.NodeMeta?.[currentNodeId]?.name ?? `Node ${currentNodeId}`;
                 setNavText(`ナビ：現在地「${curName}」 / 目的地未選択`);
                 arrowGroup.visible = true;
                 goalObj.visible = false;
               } else {
-                // ★ 到着判定（改善2）
                 if (currentNodeId === goalNodeId) {
                   const goalName = window.Route.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
                   setNavText(`ナビ：目的地「${goalName}」に到達！`);
                   arrowGroup.visible = false;
                   goalObj.visible = true;
                 } else {
-                  // ナビ計算（同一フロア限定）
                   const path = window.Route.dijkstra(currentNodeId, goalNodeId, true);
                   if (!path) {
                     setNavText("ナビ：同一フロアで経路が見つかりません");
@@ -295,7 +287,6 @@ function AR() {
                   } else {
                     const next = window.Route.nextNode(path, currentNodeId);
                     if (next == null) {
-                      // 念のため（到着扱い）
                       const goalName = window.Route.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
                       setNavText(`ナビ：目的地「${goalName}」に到達！`);
                       arrowGroup.visible = false;
@@ -307,9 +298,6 @@ function AR() {
                       arrowGroup.visible = true;
                       goalObj.visible = false;
 
-                      // 矢印は水平のままY回転で方向を示す
-                      // （階移動dirは演出で少し傾ける）
-                      // 寝かせ角度が変わる可能性があるのでここで補正
                       arrowGroup.rotation.x = -Math.PI / 2;
                       applyDirectionToArrow(dir);
                     }
@@ -339,9 +327,8 @@ function AR() {
 // グローバルにも生やしておく（デバッグ用）
 window.AR = AR;
 
-// ★ 二重起動防止：loadで一回だけ起動
+// 二重起動防止：loadで一回だけ起動
 window.addEventListener("load", () => {
-  // THREExが無い場合は起動しても落ちるので止める
   if (!window.THREEx || !window.THREE) return;
   AR();
 });
