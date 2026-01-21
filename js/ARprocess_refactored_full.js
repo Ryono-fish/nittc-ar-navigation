@@ -164,20 +164,18 @@ async function loadGoalModel(url = "models/GS.obj") {
   const geo = await loadOBJGeometry(url);
   normalizeToMarker(geo, 0.9);
 
-  const mat = new THREE.MeshNormalMaterial();
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geo, mat);
 
   const group = new THREE.Group();
   group.add(mesh);
 
   // Slightly above the marker plane
-  group.position.set(0, 0.18, 0);
+  group.position.set(0, 0.35, 0);
 
-  // Many OBJ text meshes are authored upright; rotate to stand up from marker plane.
-  // If your GS.obj looks rotated, tweak these.
-  group.rotation.x = -Math.PI / 2;
-
-  group.visible = false;
+  // Safer default: no rotation first (adjust later if needed)
+  group.rotation.set(0, 0, 0);
+group.visible = false;
   return group;
 }
 
@@ -377,7 +375,7 @@ function AR() {
                   const goalName = window.Route.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
                   setNavText(`ナビ：目的地「${goalName}」に到達！`);
                   arrowGroup.visible = false;
-                  if (goalObj) goalObj.visible = true;
+                  if (goalObj) { goalObj.visible = true; console.log('[GOAL] showing goalObj'); }
                 } else {
                   const path = window.Route.dijkstra(currentNodeId, goalNodeId, true);
                   if (!path) {
@@ -390,7 +388,7 @@ function AR() {
                       const goalName = window.Route.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
                       setNavText(`ナビ：目的地「${goalName}」に到達！`);
                       arrowGroup.visible = false;
-                      if (goalObj) goalObj.visible = true;
+                      if (goalObj) { goalObj.visible = true; console.log('[GOAL] showing goalObj'); }
                     } else {
                       const dir = window.Route.dirHintBetween(currentNodeId, next);
                       const nextName = window.Route.NodeMeta?.[next]?.name ?? `Node ${next}`;
