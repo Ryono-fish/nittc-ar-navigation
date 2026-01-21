@@ -72,8 +72,16 @@
 
 <!-- ===== Libraries ===== -->
 
+
 <script src="js/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/ar.js@3.4.5/three.js/build/ar-threex.min.js"></script>
+
+<!-- ★ ここを修正：npm/ar.js ではなく gh/AR.js を参照 -->
+<script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/three.js/build/ar-threex.min.js"></script>
+
+<!-- Route を先に（Routeをwindow.Routeで使う想定） -->
+<script src="js/route.js"></script>
+
+<!-- メイン処理 -->
 <script src="js/ARprocess_refactored_full.js"></script>
 
 
@@ -102,6 +110,11 @@
       send(e.target.value);
     }
   });
+<script>
+  console.log("THREE:", !!window.THREE);
+  console.log("THREEx:", window.THREEx);
+  console.log("Route:", window.Route);
+</script>
 
   // ===== AR 起動（最重要）=====
   AR();
