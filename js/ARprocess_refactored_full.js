@@ -79,30 +79,98 @@ function makeArrowMesh() {
   return group;
 }
 
-function makeGoalSprite() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 256;
-  const ctx = canvas.getContext("2d");
+// ===== Minimal OBJ loader (materials ignored) =====
+function parseOBJ(text) {
+  const positions = [];
+  const vertices = [null]; // 1-indexed
+  const faces = [];
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "rgba(0,0,0,0.45)";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const lines = text.split(/\r?\n/);
+  for (let line of lines) {
+    line = line.trim();
+    if (!line || line.startsWith("#")) continue;
 
-  ctx.font = "bold 120px sans-serif";
-  ctx.fillStyle = "white";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("GOAL", canvas.width / 2, canvas.height / 2);
+    const parts = line.split(/\s+/);
+    const head = parts[0];
 
-  const texture = new THREE.CanvasTexture(canvas);
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
-  const sprite = new THREE.Sprite(material);
+    if (head === "v") {
+      const x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3]);
+      vertices.push([x, y, z]);
+    } else if (head === "f") {
+      const idx = parts.slice(1).map(tok => {
+        const v = tok.split("/")[0];
+        return parseInt(v, 10);
+      }).filter(n => Number.isFinite(n));
+      if (idx.length >= 3) faces.push(idx);
+    }
+  }
 
-  sprite.scale.set(1.2, 0.6, 1);
-  sprite.position.set(0, 0.35, 0);
-  sprite.visible = false;
-  return sprite;
+  // triangulate faces with a fan
+  for (const f of faces) {
+    for (let i = 1; i < f.length - 1; i++) {
+      const a = vertices[f[0]], b = vertices[f[i]], c = vertices[f[i + 1]];
+      if (!a || !b || !c) continue;
+      positions.push(
+        a[0], a[1], a[2],
+        b[0], b[1], b[2],
+        c[0], c[1], c[2]
+      );
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geo.computeVertexNormals();
+  geo.computeBoundingBox();
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+async function loadOBJGeometry(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`OBJ load failed: ${res.status} ${res.statusText}`);
+  const text = await res.text();
+  return parseOBJ(text);
+}
+
+function normalizeToMarker(geo, targetSize = 0.9) {
+  geo.computeBoundingBox();
+  const box = geo.boundingBox;
+
+  const size = new THREE.Vector3();
+  box.getSize(size);
+
+  const center = new THREE.Vector3();
+  box.getCenter(center);
+
+  geo.translate(-center.x, -center.y, -center.z);
+
+  const maxDim = Math.max(size.x, size.y, size.z) || 1;
+  const s = targetSize / maxDim;
+  geo.scale(s, s, s);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+async function loadGoalModel(url = "models/GS.obj") {
+  const geo = await loadOBJGeometry(url);
+  normalizeToMarker(geo, 0.9);
+
+  const mat = new THREE.MeshNormalMaterial();
+  const mesh = new THREE.Mesh(geo, mat);
+
+  const group = new THREE.Group();
+  group.add(mesh);
+
+  // Slightly above the marker plane
+  group.position.set(0, 0.18, 0);
+
+  // Many OBJ text meshes are authored upright; rotate to stand up from marker plane.
+  // If your GS.obj looks rotated, tweak these.
+  group.rotation.x = -Math.PI / 2;
+
+  group.visible = false;
+  return group;
 }
 
 function applyDirectionToArrow(dir) {
@@ -219,8 +287,32 @@ function AR() {
       arrowGroup = makeArrowMesh();
       holdGroup.add(arrowGroup);
 
-      goalObj = makeGoalSprite();
-      holdGroup.add(goalObj);
+      // GOAL演出（OBJモデル）
+      // models/GS.obj を読み込む（失敗したらスプライトにフォールバック）
+      (async () => {
+        try {
+          goalObj = await loadGoalModel("models/GS.obj");
+        } catch (e) {
+          console.warn("[GOAL] OBJ load failed, fallback to sprite:", e);
+          const canvas = document.createElement("canvas");
+          canvas.width = 512; canvas.height = 256;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "rgba(0,0,0,0.45)";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.font = "bold 120px sans-serif";
+          ctx.fillStyle = "white";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("GOAL", canvas.width/2, canvas.height/2);
+          const texture = new THREE.CanvasTexture(canvas);
+          const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+          goalObj = new THREE.Sprite(material);
+          goalObj.scale.set(1.2, 0.6, 1);
+          goalObj.position.set(0, 0.35, 0);
+          if (goalObj) goalObj.visible = false;
+        }
+
+      })();
 
       // HUD初期化（HTML側が無い場合もあるので安全に）
       setGoalHudText(goalNodeId == null ? "目的地：未選択" : `目的地：${goalNodeId}`);
@@ -271,32 +363,32 @@ function AR() {
                 const curName = window.Route?.NodeMeta?.[currentNodeId]?.name ?? `Node ${currentNodeId}`;
                 setNavText(`ナビ：現在地「${curName}」 / 目的地未選択`);
                 arrowGroup.visible = true;
-                goalObj.visible = false;
+                if (goalObj) goalObj.visible = false;
               } else {
                 if (currentNodeId === goalNodeId) {
                   const goalName = window.Route.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
                   setNavText(`ナビ：目的地「${goalName}」に到達！`);
                   arrowGroup.visible = false;
-                  goalObj.visible = true;
+                  if (goalObj) goalObj.visible = true;
                 } else {
                   const path = window.Route.dijkstra(currentNodeId, goalNodeId, true);
                   if (!path) {
                     setNavText("ナビ：同一フロアで経路が見つかりません");
                     arrowGroup.visible = false;
-                    goalObj.visible = false;
+                    if (goalObj) goalObj.visible = false;
                   } else {
                     const next = window.Route.nextNode(path, currentNodeId);
                     if (next == null) {
                       const goalName = window.Route.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
                       setNavText(`ナビ：目的地「${goalName}」に到達！`);
                       arrowGroup.visible = false;
-                      goalObj.visible = true;
+                      if (goalObj) goalObj.visible = true;
                     } else {
                       const dir = window.Route.dirHintBetween(currentNodeId, next);
                       const nextName = window.Route.NodeMeta?.[next]?.name ?? `Node ${next}`;
                       setNavText(`ナビ：次は「${nextName}」へ`);
                       arrowGroup.visible = true;
-                      goalObj.visible = false;
+                      if (goalObj) goalObj.visible = false;
 
                       arrowGroup.rotation.x = -Math.PI / 2;
                       applyDirectionToArrow(dir);
