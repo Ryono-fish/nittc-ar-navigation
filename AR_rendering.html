@@ -6,13 +6,8 @@
         content="width=device-width, initial-scale=1,
                  user-scalable=no, minimum-scale=1, maximum-scale=1">
   <title>NITTC_CG2</title>
-
   <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      font-family: sans-serif;
-    }
+    body { margin: 0; overflow: hidden; font-family: sans-serif; }
     #ui {
       position: absolute;
       top: 10px;
@@ -22,66 +17,35 @@
       padding: 10px;
       border-radius: 8px;
     }
-    select {
-      font-size: 20px;
-      width: 240px;
-      height: 40px;
+    select { font-size: 20px; width: 240px; height: 40px; }
+    .hudBox{
+      position: fixed;
+      right: 10px;
+      z-index: 10000;
+      background: rgba(0,0,0,.65);
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 16px;
+      max-width: 90vw;
+      pointer-events: none;
     }
   </style>
 </head>
-
 <body>
 
-<!-- ===== HUD ===== -->
-<div id="goalHud" style="
-  position: fixed;
-  right: 10px;
-  top: 10px;
-  z-index: 10000;
-  background: rgba(0,0,0,.65);
-  color: #fff;
-  padding: 10px 12px;
-  border-radius: 10px;
-  font-size: 16px;
-  max-width: 90vw;
-">
-  目的地：未選択
-</div>
-<div id="nextHud" style="
-  position: fixed;
-  right: 10px;
-  top: 56px;
-  z-index: 10000;
-  background: rgba(0,0,0,.65);
-  color: #fff;
-  padding: 10px 12px;
-  border-radius: 10px;
-  font-size: 16px;
-  max-width: 90vw;
-">
-  次の通過地点：—
-</div>
-<div id="currentHud" style="
-  position: fixed;
-  right: 10px;
-  top: 102px;
-  z-index: 10000;
-  background: rgba(0,0,0,.65);
-  color: #fff;
-  padding: 10px 12px;
-  border-radius: 10px;
-  font-size: 16px;
-  max-width: 90vw;
-">
-  現在地：—
-</div>
+<!-- ===== HUD（右上固定） ===== -->
+<div id="goalHud" class="hudBox" style="top:10px;">目的地：未選択</div>
+<div id="nextHud" class="hudBox" style="top:56px;">次の通過地点：—</div>
+<div id="currentHud" class="hudBox" style="top:102px;">現在地：—</div>
 
-<!-- ===== UI ===== -->
+<!-- ===== ナビ文章（左下） ===== -->
 <div id="nav" style="position:fixed; left:10px; bottom:10px; z-index:9999;
   background:rgba(0,0,0,.65); color:#fff; padding:10px 12px; border-radius:10px; font-size:16px; max-width:90vw;">
   ナビ：目的地を選択してください
 </div>
 
+<!-- ===== UI ===== -->
 <div id="ui">
   <h2>目的地を入力</h2>
   <select id="destination">
@@ -113,43 +77,26 @@
   </select>
 </div>
 
-<!-- ===== Libraries（ローカルで固定） ===== -->
+<!-- ===== Libraries ===== -->
 <script src="js/three.min.js"></script>
 <script src="js/ar-threex.min.js"></script>
 <script src="js/route.js"></script>
 <script src="js/ARprocess_refactored_full.js"></script>
 
-<!-- ===== UI / Control ===== -->
 <script>
-  function hideUI() {
-    document.getElementById("ui").style.display = "none";
-  }
+  function hideUI(){ document.getElementById("ui").style.display = "none"; }
+  function setNavText(t){ const el=document.getElementById("nav"); if(el) el.textContent=t; }
 
-  function setNavText(txt){
-    const el = document.getElementById("nav");
-    if (el) el.textContent = txt;
-  }
-
-  document.getElementById("destination").addEventListener("change", function (e) {
+  document.getElementById("destination").addEventListener("change", (e) => {
     if (e.target.value === "") return;
-
     const goalId = Number(e.target.value);
-
-    // AR側の goalNodeId を確実にセット
     if (typeof window.setGoalNode === "function") {
       window.setGoalNode(goalId);
+      hideUI();
     } else {
-      console.warn("setGoalNode is not available yet.");
       setNavText("ナビ：目的地を設定できません（setGoalNode未定義）");
-      return;
     }
-
-    hideUI();
   });
-
-  // 最初の表示
-  setNavText("ナビ：目的地を選択してください");
 </script>
-
 </body>
 </html>
