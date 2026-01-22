@@ -2,9 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1,
-                 user-scalable=no, minimum-scale=1, maximum-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, minimum-scale=1, maximum-scale=1">
   <title>NITTC_CG2</title>
   <style>
     body { margin: 0; overflow: hidden; font-family: sans-serif; }
@@ -34,18 +32,15 @@
 </head>
 <body>
 
-<!-- ===== HUD（右上固定） ===== -->
 <div id="goalHud" class="hudBox" style="top:10px;">目的地：未選択</div>
 <div id="nextHud" class="hudBox" style="top:56px;">次の通過地点：—</div>
 <div id="currentHud" class="hudBox" style="top:102px;">現在地：—</div>
 
-<!-- ===== ナビ文章（左下） ===== -->
 <div id="nav" style="position:fixed; left:10px; bottom:10px; z-index:9999;
   background:rgba(0,0,0,.65); color:#fff; padding:10px 12px; border-radius:10px; font-size:16px; max-width:90vw;">
   ナビ：目的地を選択してください
 </div>
 
-<!-- ===== UI ===== -->
 <div id="ui">
   <h2>目的地を入力</h2>
   <select id="destination">
@@ -77,7 +72,6 @@
   </select>
 </div>
 
-<!-- ===== Libraries ===== -->
 <script src="js/three.min.js"></script>
 <script src="js/ar-threex.min.js"></script>
 <script src="js/route.js"></script>
@@ -85,16 +79,12 @@
 
 <script>
   function hideUI(){ document.getElementById("ui").style.display = "none"; }
-  function setNavText(t){ const el=document.getElementById("nav"); if(el) el.textContent=t; }
-
   document.getElementById("destination").addEventListener("change", (e) => {
     if (e.target.value === "") return;
     const goalId = Number(e.target.value);
     if (typeof window.setGoalNode === "function") {
       window.setGoalNode(goalId);
       hideUI();
-    } else {
-      setNavText("ナビ：目的地を設定できません（setGoalNode未定義）");
     }
   });
 </script>
