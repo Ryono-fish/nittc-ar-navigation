@@ -229,6 +229,16 @@ function AR() {
           }
 
           currentNodeId = bestId;
+          // 現在地HUD：新しく認識されたマーカーで更新（次に別マーカーを見るまで保持）
+          if (currentNodeId != null) {
+            const isVisibleNow = (markerRoots.get(currentNodeId)?.visible === true);
+            if (isVisibleNow && lastReadNodeId !== currentNodeId) {
+              lastReadNodeId = currentNodeId;
+              const curName = window.Route?.NodeMeta?.[currentNodeId]?.name ?? `Node ${currentNodeId}`;
+              setCurrentHudText(`現在地：${curName}`);
+            }
+          }
+
 
           if (currentNodeId != null) {
             const stableVisible = (now - (lastSeenAt.get(currentNodeId) ?? -Infinity)) < HOLD_MS;
