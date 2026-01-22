@@ -192,6 +192,52 @@
 
   const built = buildAdj();
 
+  // ======= NodeMeta に座標(x,y,z)を付与（矢印を正確に回すため） =======
+  // すでにGS.cpp由来の3Dグリッド上で nodePos(nodeId->{x,y,z}) を持っているので、
+  // NodeMetaにも同じ座標を埋めておく。
+  // - AR側は NodeMeta[id].x/y/z を参照して yaw を計算できる
+  // - 既存のExcel由来データは保持しつつ拡張する
+  try {
+    for (const key of Object.keys(NodeMeta)) {
+      const id = Number(key);
+      const p = built.nodePos.get(id);
+      if (p) {
+        NodeMeta[id].x = p.x;
+        NodeMeta[id].y = p.y;
+        NodeMeta[id].z = p.z;
+        // floorが未定義なら z+1 を採用（1F=1,2F=2...）
+        if (typeof NodeMeta[id].floor === "undefined") NodeMeta[id].floor = (p.z + 1);
+      }
+    }
+  } catch (e) {
+    console.warn("[Route] failed to enrich NodeMeta coords:", e);
+  }
+
+  // ======= 追加/削除エッジのパッチ =======
+  // 要望:
+  // 1) 0-1, 3-4, 6-7 を重み27で双方向接続
+  // 2) 1Fで 0-3 と 3-6 の接続を削除（双方向）
+  function addUndirected(a, b, w) {
+    if (!built.adj[a]) built.adj[a] = [];
+    if (!built.adj[b]) built.adj[b] = [];
+    if (!built.adj[a].some(e => e.to === b)) built.adj[a].push({ to: b, cost: w, dirHint: null });
+    if (!built.adj[b].some(e => e.to === a)) built.adj[b].push({ to: a, cost: w, dirHint: null });
+  }
+  function removeUndirected(a, b) {
+    if (built.adj[a]) built.adj[a] = built.adj[a].filter(e => e.to !== b);
+    if (built.adj[b]) built.adj[b] = built.adj[b].filter(e => e.to !== a);
+  }
+
+  // 追加（不具合が出たらコメントアウト可）
+  addUndirected(0, 1, 27);
+  addUndirected(3, 4, 27);
+  addUndirected(6, 7, 27);
+
+  // 削除（1Fのみに限るなら floor でガード）
+  const f0 = NodeMeta?.[0]?.floor, f3 = NodeMeta?.[3]?.floor, f6 = NodeMeta?.[6]?.floor;
+  if (f0 === 1 && f3 === 1) removeUndirected(0, 3);
+  if (f3 === 1 && f6 === 1) removeUndirected(3, 6);
+
   window.Route = {
     INF, LENGTH, HEIGHT,
     G,
