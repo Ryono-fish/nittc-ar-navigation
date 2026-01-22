@@ -191,7 +191,7 @@
   }
 
   const built = buildAdj();
-  // ======= NodeMeta に座標（x,y,z）を付与（nodePosから自動） =======
+  // ======= NodeMeta に座標(x,y,z)を付与（nodePosから自動） =======
   for (const [id, p] of built.nodePos.entries()) {
     if (!NodeMeta[id]) NodeMeta[id] = {};
     NodeMeta[id].x = p.x;
@@ -199,41 +199,28 @@
     NodeMeta[id].z = p.z;
   }
 
-  // ======= 経路パッチ（安全に built.adj を直接編集） =======
+  // ======= 経路パッチ（built.adj を直接編集） =======
   function removeAdjEdge(a, b) {
     if (!built.adj[a]) return;
     built.adj[a] = built.adj[a].filter(e => e.to !== b);
   }
-  function upsertAdjEdge(a, b, cost, dirHint = null) {
+  function upsertAdjEdge(a, b, cost) {
     if (!built.adj[a]) built.adj[a] = [];
     const hit = built.adj[a].find(e => e.to === b);
-    if (hit) {
-      hit.cost = cost;
-      if (dirHint != null) hit.dirHint = dirHint;
-    } else {
-      built.adj[a].push({ to: b, cost, dirHint: (dirHint != null ? dirHint : 0) });
-    }
+    if (hit) hit.cost = cost;
+    else built.adj[a].push({ to: b, cost, dirHint: 0 });
   }
 
-  // 追加：0-1, 3-4, 6-7 を重み27で双方向接続（dirHintは後で必要なら調整）
-  const addPairs = [
-    [0, 1, 27],
-    [3, 4, 27],
-    [6, 7, 27],
-  ];
-  for (const [a, b, w] of addPairs) {
-    upsertAdjEdge(a, b, w);
-    upsertAdjEdge(b, a, w);
+  // 追加：0-1, 3-4, 6-7 を重み27で双方向接続
+  for (const [a,b,w] of [[0,1,27],[3,4,27],[6,7,27]]) {
+    upsertAdjEdge(a,b,w);
+    upsertAdjEdge(b,a,w);
   }
 
-  // 削除：1Fの 0-3 と 3-6 を双方向で切断
-  const cutPairs = [
-    [0, 3],
-    [3, 6],
-  ];
-  for (const [a, b] of cutPairs) {
-    removeAdjEdge(a, b);
-    removeAdjEdge(b, a);
+  // 削除：0-3 と 3-6 を双方向で切断（1F）
+  for (const [a,b] of [[0,3],[3,6]]) {
+    removeAdjEdge(a,b);
+    removeAdjEdge(b,a);
   }
 
 
