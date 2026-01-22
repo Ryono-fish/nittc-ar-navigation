@@ -103,7 +103,7 @@ function computeWorldYaw(curId, nextId) {
   if (dx === 0 && dy === 0) return null;
 
   // Grid: up is y-1, so forward vector is (0,-1)
-  return Math.atan2(dx, -dy) + YAW_OFFSET;
+  return Math.atan2(-dx, -dy) + YAW_OFFSET;
 }
 
 // Extract marker yaw from holdGroup.matrix (world transform of marker)
