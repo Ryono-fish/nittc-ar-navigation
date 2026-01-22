@@ -1,11 +1,10 @@
 /*
- ARprocess_refactored_full.js
+ ARprocess_refactored_full.js (v2 patch)
  --------------------------------
- ✅ 複数マーカー対応（MarkerMap: patt名→nodeId を使用）
- ✅ 目的地選択 → 最短経路(Route.dijkstra) → 次ノード方向を矢印で表示
- ✅ 表示安定化：見失っても一定時間は表示を保持（ホールド）
- ✅ 到着時演出：GOAL表示（矢印OFF）
- ✅ 矢印は地面に水平（-90°寝かせ、Y回転のみ）
+ ✅ 右上HUD：目的地 / 次の通過地点 / 現在地（読み込むたび更新、次まで保持）
+ ✅ 1Fの接続除去：0-3 と 3-6 を切断
+ ✅ 追加エッジ：0-1, 3-4, 6-7 を重み 27 で接続
+ ✅ 矢印向き：可能ならノード座標から yaw を計算して目的地方向へ回す
 */
 
 if (!window.THREE) console.error("THREE is not defined. three.min.js の読み込み順を確認してください。");
@@ -15,47 +14,37 @@ if (!window.Route) console.warn("Route is not defined. js/route.js を先に読�
 let scene, camera, renderer;
 let source, context;
 
-// 表示安定化（見失っても一定時間は表示を保持）
-const HOLD_MS = 700; // 500〜900で調整
+const HOLD_MS = 700;
 
-// ===== ナビ設定 =====
-// true: 同一フロア限定 / false: 全フロア（上下移動も含む）
-// まずは false にして全フロア対応を試す。
+// true: 同一フロア限定 / false: 全フロア
 const SAME_FLOOR_ONLY = false;
-const lastSeenAt = new Map();     // nodeId -> time
-const lastMatrix = new Map();     // nodeId -> THREE.Matrix4
+
+const lastSeenAt = new Map(); // nodeId -> time
+const lastMatrix = new Map(); // nodeId -> THREE.Matrix4
 let currentNodeId = null;
 let goalNodeId = null;
-
-// HUD保持用：最後に『読み込んだ（見えた）』現在地
 let lastReadNodeId = null;
 
-// 表示用（現在地マーカーの座標に追従）
 let holdGroup = null;
 let arrowGroup = null;
-let goalObj = null; // GOAL演出
 
 function setNavText(text) {
   const el = document.getElementById("nav");
   if (el) el.textContent = text;
 }
-
 function setGoalHudText(text) {
   const el = document.getElementById("goalHud");
   if (el) el.textContent = text;
 }
-
 function setNextHudText(text) {
   const el = document.getElementById("nextHud");
   if (el) el.textContent = text;
 }
-
 function setCurrentHudText(text) {
   const el = document.getElementById("currentHud");
   if (el) el.textContent = text;
 }
 
-// 目的地セット（HTMLから呼ばれる）
 window.setGoalNode = function (nodeId) {
   const n = Number(nodeId);
   goalNodeId = Number.isFinite(n) ? n : null;
@@ -68,70 +57,11 @@ window.setGoalNode = function (nodeId) {
     const name = window.Route?.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
     setNavText(`ナビ：目的地「${name}」を設定しました。マーカーを映してください`);
     setGoalHudText(`目的地：${name}`);
-    // 目的地を変えたら次の通過地点表示はリセット
     setNextHudText("次の通過地点：—");
   }
 };
 
-
-// ===== 追加エッジ（重み付き） =====
-// 0-1, 3-4, 6-7 を重み 27 で双方向接続する
-function applyExtraEdges() {
-  if (!window.Route) return;
-
-  const pairs = [
-    [0, 1, 27],
-    [3, 4, 27],
-    [6, 7, 27]
-  ];
-
-  // すでに適用済みなら二重追加しない
-  if (window.Route.__extraEdgesApplied) return;
-
-  try {
-    if (typeof window.Route.addEdge === "function") {
-      for (const [a, b, w] of pairs) {
-        window.Route.addEdge(a, b, w);
-        window.Route.addEdge(b, a, w);
-      }
-      window.Route.__extraEdgesApplied = true;
-      console.log("[Route] extra edges applied via Route.addEdge()");
-      return;
-    }
-
-    // adj: Array< Array<{to,cost}> >
-    if (Array.isArray(window.Route.adj)) {
-      for (const [a, b, w] of pairs) {
-        window.Route.adj[a] = window.Route.adj[a] || [];
-        window.Route.adj[b] = window.Route.adj[b] || [];
-        window.Route.adj[a].push({ to: b, cost: w });
-        window.Route.adj[b].push({ to: a, cost: w });
-      }
-      window.Route.__extraEdgesApplied = true;
-      console.log("[Route] extra edges applied to Route.adj");
-      return;
-    }
-
-    // graph/Graph: adjacency matrix style
-    const mat = window.Route.graph || window.Route.Graph;
-    if (Array.isArray(mat)) {
-      for (const [a, b, w] of pairs) {
-        if (Array.isArray(mat[a])) mat[a][b] = w;
-        if (Array.isArray(mat[b])) mat[b][a] = w;
-      }
-      window.Route.__extraEdgesApplied = true;
-      console.log("[Route] extra edges applied to adjacency matrix");
-      return;
-    }
-
-    console.warn("[Route] extra edges NOT applied: unknown graph structure (addEdge/adj/graph not found)");
-  } catch (e) {
-    console.warn("[Route] extra edges apply failed:", e);
-  }
-}
-
 function makeArrowMesh() {
-  // シンプルな矢印（円柱 + 円錐）
   const group = new THREE.Group();
 
   const shaft = new THREE.Mesh(
@@ -148,69 +78,133 @@ function makeArrowMesh() {
   head.position.y = 0.75;
   group.add(head);
 
-  // 矢印を地面に水平に寝かせる
+  // 水平に寝かせる
   group.rotation.x = -Math.PI / 2;
-
-  // 全体を少し浮かせる（地面に埋まるの防止）
   group.position.y = 0.08;
 
   return group;
 }
 
-function makeGoalSprite() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 256;
-  const ctx = canvas.getContext("2d");
+// ===== Route graph patch helpers =====
+function addEdgeCompat(a, b, w) {
+  const R = window.Route;
+  if (!R) return false;
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = "rgba(0,0,0,0.45)";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.font = "bold 120px sans-serif";
-  ctx.fillStyle = "white";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("GOAL", canvas.width / 2, canvas.height / 2);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
-  const sprite = new THREE.Sprite(material);
-
-  sprite.scale.set(1.2, 0.6, 1);
-  sprite.position.set(0, 0.35, 0);
-  sprite.visible = false;
-  return sprite;
+  if (typeof R.addEdge === "function") {
+    R.addEdge(a, b, w);
+    return true;
+  }
+  if (Array.isArray(R.adj) && Array.isArray(R.adj[a])) {
+    R.adj[a].push({ to: b, cost: w });
+    return true;
+  }
+  if (Array.isArray(R.graph) && Array.isArray(R.graph[a])) {
+    R.graph[a][b] = w;
+    return true;
+  }
+  return false;
 }
 
-function applyDirectionToArrow(dir) {
-  if (!arrowGroup) return;
-  if (dir == null) return;
+function removeEdgeCompat(a, b) {
+  const R = window.Route;
+  if (!R) return false;
 
-  // Y回転だけ初期化
+  let ok = false;
+
+  if (Array.isArray(R.adj) && Array.isArray(R.adj[a])) {
+    const before = R.adj[a].length;
+    R.adj[a] = R.adj[a].filter(e => e.to !== b);
+    ok = ok || (R.adj[a].length !== before);
+  }
+
+  if (Array.isArray(R.graph) && Array.isArray(R.graph[a])) {
+    if (typeof R.graph[a][b] !== "undefined") {
+      R.graph[a][b] = 0; // "no edge" を 0 扱いしている実装が多い
+      ok = true;
+    }
+  }
+
+  if (typeof R.removeEdge === "function") {
+    R.removeEdge(a, b);
+    ok = true;
+  }
+
+  return ok;
+}
+
+function applyGraphPatches() {
+  const R = window.Route;
+  if (!R || R.__graphPatchesApplied) return;
+
+  // 追加エッジ（重み27）
+  const addPairs = [
+    [0, 1, 27],
+    [3, 4, 27],
+    [6, 7, 27],
+  ];
+  for (const [a, b, w] of addPairs) {
+    addEdgeCompat(a, b, w);
+    addEdgeCompat(b, a, w);
+  }
+
+  // 1Fの接続除去：0-3 と 3-6
+  const cutPairs = [
+    [0, 3],
+    [3, 6],
+  ];
+  for (const [a, b] of cutPairs) {
+    removeEdgeCompat(a, b);
+    removeEdgeCompat(b, a);
+  }
+
+  R.__graphPatchesApplied = true;
+  console.log("[Route] graph patches applied (add/cut).");
+}
+
+// ===== Arrow direction: use coords if available =====
+function getNodePos(id) {
+  const m = window.Route?.NodeMeta?.[id];
+  if (!m) return null;
+
+  // examples supported: {x,y,z} or {pos:{x,y,z}} or {gx,gy,gz}
+  const p = m.pos || m.position || null;
+  const x = (p && Number.isFinite(p.x)) ? p.x : (Number.isFinite(m.x) ? m.x : (Number.isFinite(m.gx) ? m.gx : null));
+  const y = (p && Number.isFinite(p.y)) ? p.y : (Number.isFinite(m.y) ? m.y : (Number.isFinite(m.gy) ? m.gy : null));
+  const z = (p && Number.isFinite(p.z)) ? p.z : (Number.isFinite(m.z) ? m.z : (Number.isFinite(m.gz) ? m.gz : null));
+
+  if (x == null || y == null || z == null) return null;
+  return { x, y, z };
+}
+
+function applyDirectionToArrowByYaw(curId, nextId) {
+  if (!arrowGroup) return false;
+  const c = getNodePos(curId);
+  const n = getNodePos(nextId);
+  if (!c || !n) return false;
+
+  const dx = n.x - c.x;
+  const dz = n.z - c.z;
+  if (dx === 0 && dz === 0) return false;
+
+  // yaw only (XZ plane)
+  const yaw = Math.atan2(dx, dz);
+
+  arrowGroup.rotation.x = -Math.PI / 2;
+  arrowGroup.rotation.y = yaw;
+  return true;
+}
+
+function applyDirectionToArrowByDirHint(dir) {
+  if (!arrowGroup) return;
+  arrowGroup.rotation.x = -Math.PI / 2;
   arrowGroup.rotation.y = 0;
 
   switch (dir) {
-    case 0: // 上（前）
-      arrowGroup.rotation.y = 0;
-      break;
-    case 1: // 右
-      arrowGroup.rotation.y = -Math.PI / 2;
-      break;
-    case 2: // 下（後）
-      arrowGroup.rotation.y = Math.PI;
-      break;
-    case 3: // 左
-      arrowGroup.rotation.y = Math.PI / 2;
-      break;
-    case 5: // 上階（演出用）
-      arrowGroup.rotation.x = -Math.PI / 2 - Math.PI / 6;
-      break;
-    case 4: // 下階（演出用）
-      arrowGroup.rotation.x = -Math.PI / 2 + Math.PI / 6;
-      break;
-    default:
-      break;
+    case 0: arrowGroup.rotation.y = 0; break;
+    case 1: arrowGroup.rotation.y = -Math.PI / 2; break;
+    case 2: arrowGroup.rotation.y = Math.PI; break;
+    case 3: arrowGroup.rotation.y = Math.PI / 2; break;
+    default: break;
   }
 }
 
@@ -234,7 +228,6 @@ function AR() {
   light.position.set(0, 0, 2);
   scene.add(light);
 
-  // AR.js source
   source = new THREEx.ArToolkitSource({ sourceType: "webcam" });
 
   function onResize() {
@@ -253,7 +246,6 @@ function AR() {
   source.init(() => {
     onResize();
 
-    // AR.js context
     context = new THREEx.ArToolkitContext({
       cameraParametersUrl: "camera_para.dat",
       detectionMode: "mono"
@@ -264,7 +256,9 @@ function AR() {
 
       camera.projectionMatrix.copy(context.getProjectionMatrix());
 
-      // マーカー登録
+      // Apply graph patches once Route is available
+      applyGraphPatches();
+
       const markerMap = window.Route?.MarkerMap || {};
       const ids = Object.values(markerMap);
 
@@ -288,7 +282,6 @@ function AR() {
         });
       }
 
-      // 表示（ホールド）
       holdGroup = new THREE.Group();
       holdGroup.matrixAutoUpdate = false;
       holdGroup.visible = false;
@@ -297,16 +290,9 @@ function AR() {
       arrowGroup = makeArrowMesh();
       holdGroup.add(arrowGroup);
 
-      goalObj = makeGoalSprite();
-      holdGroup.add(goalObj);
-
-      // HUD初期化（HTML側が無い場合もあるので安全に）
       setGoalHudText(goalNodeId == null ? "目的地：未選択" : `目的地：${goalNodeId}`);
       setNextHudText("次の通過地点：—");
       setCurrentHudText("現在地：—");
-
-      // 追加エッジ適用（Routeがあれば）
-      applyExtraEdges();
 
       console.log("[AR] initialized. markers =", markerRoots.size);
 
@@ -315,7 +301,6 @@ function AR() {
 
         if (source && source.ready !== false && context && context.arController) {
           context.update(source.domElement);
-
           const now = (performance && performance.now) ? performance.now() : Date.now();
 
           let bestId = null;
@@ -344,6 +329,16 @@ function AR() {
 
           currentNodeId = bestId;
 
+          // マーカーを「読み込んだ」タイミングでHUD更新（保持）
+          if (currentNodeId != null) {
+            const isVisibleNow = (markerRoots.get(currentNodeId)?.visible === true);
+            if (isVisibleNow && lastReadNodeId !== currentNodeId) {
+              lastReadNodeId = currentNodeId;
+              const curName = window.Route?.NodeMeta?.[currentNodeId]?.name ?? `Node ${currentNodeId}`;
+              setCurrentHudText(`現在地：${curName}`);
+            }
+          }
+
           if (currentNodeId != null) {
             const stableVisible = (now - (lastSeenAt.get(currentNodeId) ?? -Infinity)) < HOLD_MS;
             if (stableVisible) {
@@ -353,36 +348,34 @@ function AR() {
               if (goalNodeId == null || !window.Route) {
                 const curName = window.Route?.NodeMeta?.[currentNodeId]?.name ?? `Node ${currentNodeId}`;
                 setNavText(`ナビ：現在地「${curName}」 / 目的地未選択`);
-                arrowGroup.visible = true;
-                goalObj.visible = false;
+                setNextHudText("次の通過地点：—");
               } else {
                 if (currentNodeId === goalNodeId) {
                   const goalName = window.Route.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
                   setNavText(`ナビ：目的地「${goalName}」に到達！`);
-                  arrowGroup.visible = false;
-                  goalObj.visible = true;
+                  setNextHudText("次の通過地点：GOAL");
                 } else {
                   const path = window.Route.dijkstra(currentNodeId, goalNodeId, SAME_FLOOR_ONLY);
                   if (!path) {
-                    setNavText("ナビ：同一フロアで経路が見つかりません");
-                    arrowGroup.visible = false;
-                    goalObj.visible = false;
+                    setNavText("ナビ：経路が見つかりません");
+                    setNextHudText("次の通過地点：—");
                   } else {
                     const next = window.Route.nextNode(path, currentNodeId);
                     if (next == null) {
                       const goalName = window.Route.NodeMeta?.[goalNodeId]?.name ?? `Node ${goalNodeId}`;
                       setNavText(`ナビ：目的地「${goalName}」に到達！`);
-                      arrowGroup.visible = false;
-                      goalObj.visible = true;
+                      setNextHudText("次の通過地点：GOAL");
                     } else {
-                      const dir = window.Route.dirHintBetween(currentNodeId, next);
                       const nextName = window.Route.NodeMeta?.[next]?.name ?? `Node ${next}`;
                       setNavText(`ナビ：次は「${nextName}」へ`);
-                      arrowGroup.visible = true;
-                      goalObj.visible = false;
+                      setNextHudText(`次の通過地点：${nextName}`);
 
-                      arrowGroup.rotation.x = -Math.PI / 2;
-                      applyDirectionToArrow(dir);
+                      // 向き：座標が取れるなら yaw、無理なら dirHint
+                      const ok = applyDirectionToArrowByYaw(currentNodeId, next);
+                      if (!ok && typeof window.Route.dirHintBetween === "function") {
+                        const dir = window.Route.dirHintBetween(currentNodeId, next);
+                        applyDirectionToArrowByDirHint(dir);
+                      }
                     }
                   }
                 }
@@ -404,13 +397,26 @@ function AR() {
     });
   });
 
-  window.addEventListener("resize", onResize);
+  window.addEventListener("resize", () => {
+    // onResize is inside AR(); keep simple by reloading sizes via source hooks if possible
+    // (This minimal handler avoids breaking if source isn't ready)
+    try {
+      if (!source) return;
+      if (typeof source.onResizeElement === "function") source.onResizeElement();
+      else source.onResize();
+      if (renderer) {
+        if (typeof source.copyElementSizeTo === "function") source.copyElementSizeTo(renderer.domElement);
+        else source.copySizeTo(renderer.domElement);
+      }
+      if (context && context.arController) {
+        if (typeof source.copyElementSizeTo === "function") source.copyElementSizeTo(context.arController.canvas);
+        else source.copySizeTo(context.arController.canvas);
+      }
+    } catch(e) {}
+  });
 }
 
-// グローバルにも生やしておく（デバッグ用）
 window.AR = AR;
-
-// 二重起動防止：loadで一回だけ起動
 window.addEventListener("load", () => {
   if (!window.THREEx || !window.THREE) return;
   AR();
