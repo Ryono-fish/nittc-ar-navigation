@@ -88,7 +88,17 @@ function loadGLB(url) {
       const magic = String.fromCharCode(u8[0]||0, u8[1]||0, u8[2]||0, u8[3]||0);
       console.log("[MODEL] fetch ok:", { url: bustUrl, status: res.status, type: res.headers.get("content-type"), bytes: u8.byteLength, magic, head });
 
-      if (magic !== "glTF") {
+      
+      // Debug: parse GLB header (little-endian)
+      const dv = new DataView(arrayBuffer);
+      const version = dv.getUint32(4, true);
+      const totalLen = dv.getUint32(8, true);
+      console.log("[MODEL] glb header:", { version, totalLen, byteLength: u8.byteLength });
+
+      if (totalLen !== u8.byteLength) {
+        console.warn("[MODEL] WARNING: downloaded size != header length. File may be truncated or cached incorrectly.");
+      }
+if (magic !== "glTF") {
         throw new Error(`Downloaded file is not a .glb (magic=${magic}). First16=${head}`);
       }
 
