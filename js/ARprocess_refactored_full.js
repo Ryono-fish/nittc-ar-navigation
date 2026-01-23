@@ -67,20 +67,26 @@ window.setGoalNode = function (nodeId) {
 };
 
 function loadGLB(url) {
-  return new Promise((resolve, reject) => {
-    if (!THREE || !THREE.GLTFLoader) {
-      reject(new Error("THREE.GLTFLoader is not available. Check GLTFLoader script include."));
-      return;
+  return new Promise(async (resolve, reject) => {
+    try {
+      if (!THREE || !THREE.GLTFLoader) {
+        reject(new Error("THREE.GLTFLoader is not available. Check GLTFLoader script include."));
+        return;
+      }
+      // Fetch as ArrayBuffer (avoids responseType/caching quirks)
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) {
+        reject(new Error(`HTTP ${res.status} while fetching ${url}`));
+        return;
+      }
+      const arrayBuffer = await res.arrayBuffer();
+
+      const loader = new THREE.GLTFLoader();
+      const basePath = url.replace(/[^\/]*$/, "");
+      loader.parse(arrayBuffer, basePath, (gltf) => resolve(gltf), (err) => reject(err));
+    } catch (e) {
+      reject(e);
     }
-    const loader = new THREE.GLTFLoader();
-    loader.load(url, (gltf) => resolve(gltf), undefined, (err) => {
-      try {
-        const status = err?.target?.status;
-        const statusText = err?.target?.statusText;
-        console.warn("[MODEL] load error details:", { url, status, statusText, err });
-      } catch(e) {}
-      reject(err);
-    });
   });
 }
 
