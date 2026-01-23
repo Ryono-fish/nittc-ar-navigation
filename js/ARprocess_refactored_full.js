@@ -17,6 +17,11 @@ const SAME_FLOOR_ONLY = false;
 // Adjust if your printed marker "front" differs from grid up-direction
 const YAW_OFFSET = 0;
 
+// ===== glb models =====
+const MODEL_ARROW = "models/nav_arrow.glb";
+const MODEL_GOAL  = "models/goal_pin.glb";
+
+
 const lastSeenAt = new Map();
 const lastMatrix = new Map();
 let currentNodeId = null;
@@ -26,6 +31,8 @@ let lastReadNodeId = null;
 let holdGroup = null;
 let yawCorrector = null;
 let arrowGroup = null;
+let arrowVisual = null;
+let goalPin = null;
 
 function setNavText(text) {
   const el = document.getElementById("nav");
@@ -59,27 +66,23 @@ window.setGoalNode = function (nodeId) {
   }
 };
 
+function loadGLB(url) {
+  return new Promise((resolve, reject) => {
+    if (!THREE || !THREE.GLTFLoader) {
+      reject(new Error("THREE.GLTFLoader is not available. Check GLTFLoader script include."));
+      return;
+    }
+    const loader = new THREE.GLTFLoader();
+    loader.load(url, (gltf) => resolve(gltf), undefined, (err) => reject(err));
+  });
+}
+
 function makeArrowMesh() {
+  // Container group rotated to lie flat on marker plane.
+  // The loaded glb arrow will be attached under this group as 'arrowVisual'.
   const group = new THREE.Group();
-
-  const shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.07, 0.07, 0.6, 12),
-    new THREE.MeshNormalMaterial()
-  );
-  shaft.position.y = 0.3;
-  group.add(shaft);
-
-  const head = new THREE.Mesh(
-    new THREE.ConeGeometry(0.16, 0.25, 16),
-    new THREE.MeshNormalMaterial()
-  );
-  head.position.y = 0.75;
-  group.add(head);
-
-  // Lay flat on marker plane
   group.rotation.x = -Math.PI / 2;
   group.position.y = 0.08;
-
   return group;
 }
 
@@ -193,6 +196,40 @@ function AR() {
       arrowGroup = makeArrowMesh();
       yawCorrector.add(arrowGroup);
 
+
+      // ===== load glb models (arrow + goal) =====
+      (async () => {
+        try {
+          const gltfArrow = await loadGLB(MODEL_ARROW);
+          arrowVisual = gltfArrow.scene || (gltfArrow.scenes && gltfArrow.scenes[0]);
+          if (arrowVisual) {
+            arrowVisual.position.set(0, 0, 0);
+            arrowVisual.rotation.set(0, 0, 0);
+            arrowVisual.scale.set(1, 1, 1);
+            arrowGroup.add(arrowVisual);
+          }
+          console.log("[MODEL] arrow loaded:", MODEL_ARROW);
+        } catch (e) {
+          console.warn("[MODEL] arrow load failed:", e);
+        }
+
+        try {
+          const gltfGoal = await loadGLB(MODEL_GOAL);
+          goalPin = gltfGoal.scene || (gltfGoal.scenes && gltfGoal.scenes[0]);
+          if (goalPin) {
+            goalPin.position.set(0, 0.15, 0);
+            goalPin.rotation.set(0, 0, 0);
+            goalPin.scale.set(1, 1, 1);
+            goalPin.visible = false;
+            holdGroup.add(goalPin);
+          }
+          console.log("[MODEL] goal loaded:", MODEL_GOAL);
+        } catch (e) {
+          console.warn("[MODEL] goal load failed:", e);
+        }
+      })();
+
+
       setGoalHudText(goalNodeId == null ? "目的地：未選択" : `目的地：${goalNodeId}`);
       setNextHudText("次の通過地点：—");
       setCurrentHudText("現在地：—");
@@ -249,6 +286,7 @@ function AR() {
               if (goalNodeId != null && window.Route) {
                 if (currentNodeId === goalNodeId) {
                   arrowGroup.visible = false;
+                  if (goalPin) goalPin.visible = true;
                   setNextHudText("次の通過地点：GOAL");
                   setNavText("ナビ：目的地に到達！");
                 } else {
@@ -257,6 +295,8 @@ function AR() {
                     const next = window.Route.nextNode(path, currentNodeId);
                     if (next != null) {
                       arrowGroup.visible = true;
+                if (goalPin) goalPin.visible = false;
+                      if (goalPin) goalPin.visible = false;
                       const worldYaw = computeWorldYaw(currentNodeId, next);
                       if (worldYaw != null) {
                         const markerYaw = getMarkerYaw();
@@ -271,6 +311,7 @@ function AR() {
                 }
               } else {
                 arrowGroup.visible = true;
+                if (goalPin) goalPin.visible = false;
               }
             } else {
               holdGroup.visible = false;
