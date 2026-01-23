@@ -18,8 +18,8 @@ const SAME_FLOOR_ONLY = false;
 const YAW_OFFSET = 0;
 
 // ===== glb models =====
-const MODEL_ARROW = "models/nav_arrow.glb";
-const MODEL_GOAL  = "models/goal_pin.glb";
+const MODEL_ARROW = new URL("models/nav_arrow.glb", window.location.href).href;
+const MODEL_GOAL  = new URL("models/goal_pin.glb", window.location.href).href;
 
 
 const lastSeenAt = new Map();
@@ -73,7 +73,14 @@ function loadGLB(url) {
       return;
     }
     const loader = new THREE.GLTFLoader();
-    loader.load(url, (gltf) => resolve(gltf), undefined, (err) => reject(err));
+    loader.load(url, (gltf) => resolve(gltf), undefined, (err) => {
+      try {
+        const status = err?.target?.status;
+        const statusText = err?.target?.statusText;
+        console.warn("[MODEL] load error details:", { url, status, statusText, err });
+      } catch(e) {}
+      reject(err);
+    });
   });
 }
 
