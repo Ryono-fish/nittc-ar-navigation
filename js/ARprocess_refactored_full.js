@@ -74,12 +74,24 @@ function loadGLB(url) {
         return;
       }
       // Fetch as ArrayBuffer (avoids responseType/caching quirks)
-      const res = await fetch(url, { cache: "no-store" });
+      const bustUrl = url + (url.includes("?") ? "&" : "?") + "v=" + Date.now();
+      const res = await fetch(bustUrl, { cache: "no-store" });
       if (!res.ok) {
         reject(new Error(`HTTP ${res.status} while fetching ${url}`));
         return;
       }
       const arrayBuffer = await res.arrayBuffer();
+
+      // Debug: inspect header
+      const u8 = new Uint8Array(arrayBuffer);
+      const head = Array.from(u8.slice(0, 16)).map(b => b.toString(16).padStart(2,"0")).join(" ");
+      const magic = String.fromCharCode(u8[0]||0, u8[1]||0, u8[2]||0, u8[3]||0);
+      console.log("[MODEL] fetch ok:", { url: bustUrl, status: res.status, type: res.headers.get("content-type"), bytes: u8.byteLength, magic, head });
+
+      if (magic !== "glTF") {
+        throw new Error(`Downloaded file is not a .glb (magic=${magic}). First16=${head}`);
+      }
+
 
       const loader = new THREE.GLTFLoader();
       const basePath = url.replace(/[^\/]*$/, "");
