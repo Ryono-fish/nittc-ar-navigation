@@ -20,6 +20,10 @@ const YAW_OFFSET = 0;
 // ===== models (local files) =====
 const MODEL_ARROW = "models/nav_arrow.glb";
 const MODEL_GOAL  = "models/goal_pin.glb";
+// If your goal pin is lying down or upside-down, adjust these.
+const GOAL_ROT_FIX_X = Math.PI / 2;
+const GOAL_ROT_FIX_Y = 0;
+const GOAL_ROT_FIX_Z = 0;
 
 
 const lastSeenAt = new Map();
@@ -201,7 +205,9 @@ function loadGLBMinimal(url, label) {
 
         geom.computeBoundingSphere();
 
-        const mat = new THREE.MeshNormalMaterial();
+        const mat = (label === "goal")
+          ? new THREE.MeshPhongMaterial({ color: 0xff3333 })
+          : new THREE.MeshPhongMaterial({ color: 0x00aaff });
         return new THREE.Mesh(geom, mat);
       }
 
@@ -373,7 +379,7 @@ function AR() {
           arrowVisual.rotation.set(0, 0, 0);
           arrowVisual.scale.set(1, 1, 1);
           // Remove fallback geometry children if any
-          arrowGroup.clear();
+          while (arrowGroup.children.length) { arrowGroup.remove(arrowGroup.children[0]); }
           arrowGroup.add(arrowVisual);
           console.log("[MODEL] arrow loaded:", MODEL_ARROW);
         } catch (e) {
@@ -385,7 +391,7 @@ function AR() {
         try {
           goalPin = await loadGLBMinimal(MODEL_GOAL, "goal");
           goalPin.position.set(0, 0.15, 0);
-          goalPin.rotation.set(0, 0, 0);
+          goalPin.rotation.set(GOAL_ROT_FIX_X, GOAL_ROT_FIX_Y, GOAL_ROT_FIX_Z);
           goalPin.scale.set(1, 1, 1);
           goalPin.visible = false;
           holdGroup.add(goalPin);
