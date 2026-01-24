@@ -34,6 +34,11 @@ let arrowGroup = null;
 let arrowVisual = null;
 let goalPin = null;
 
+function setModelStatus(msg){
+  const el = document.getElementById('nav');
+  if (el) el.textContent = msg;
+}
+
 function setNavText(text) {
   const el = document.getElementById("nav");
   if (el) el.textContent = text;
@@ -66,7 +71,8 @@ window.setGoalNode = function (nodeId) {
   }
 };
 
-function loadGLBMinimal(url) {
+
+function loadGLBMinimal(url, label) {
   // Minimal GLB (glTF 2.0) loader for simple meshes (no textures/skins).
   // Returns THREE.Group.
   return new Promise(async (resolve, reject) => {
@@ -78,11 +84,14 @@ function loadGLBMinimal(url) {
 
       const u8 = new Uint8Array(arrayBuffer);
       const magic = String.fromCharCode(u8[0]||0, u8[1]||0, u8[2]||0, u8[3]||0);
-      if (magic !== "glTF") throw new Error(`Not a GLB (magic=${magic})`);
-
       const dv = new DataView(arrayBuffer);
       const version = dv.getUint32(4, true);
+      const totalLen = dv.getUint32(8, true);
+      console.log("[MODEL] fetch:", { label, url: bustUrl, status: res.status, type: res.headers.get("content-type"), byteLength: u8.byteLength, magic, version, totalLen });
+
+      if (magic !== "glTF") throw new Error(`Not a GLB (magic=${magic})`);
       if (version !== 2) throw new Error(`Unsupported GLB version ${version}`);
+      if (totalLen !== u8.byteLength) throw new Error(`Truncated GLB (headerLen=${totalLen}, got=${u8.byteLength})`);
 
       // Parse chunks
       let offset = 12;
@@ -95,20 +104,27 @@ function loadGLBMinimal(url) {
         const chunkData = u8.slice(offset, offset + chunkLen);
         offset += chunkLen;
 
-        // JSON = 0x4E4F534A, BIN = 0x004E4942 (stored as uint32 little-endian)
-        if (chunkType === 0x4E4F534A) jsonChunk = chunkData;
-        else if (chunkType === 0x004E4942) binChunk = chunkData;
+        if (chunkType === 0x4E4F534A) jsonChunk = chunkData;       // JSON
+        else if (chunkType === 0x004E4942) binChunk = chunkData;  // BIN
       }
       if (!jsonChunk) throw new Error("GLB missing JSON chunk");
-      const gltf = JSON.parse(new TextDecoder("utf-8").decode(jsonChunk));
 
-      const buffers = [];
-      buffers[0] = binChunk ? binChunk.buffer.slice(binChunk.byteOffset, binChunk.byteOffset + binChunk.byteLength) : null;
+      const gltf = JSON.parse(new TextDecoder("utf-8").decode(jsonChunk));
+      const binBuf = binChunk ? binChunk.buffer.slice(binChunk.byteOffset, binChunk.byteOffset + binChunk.byteLength) : null;
+
+      if ((gltf.extensionsRequired && gltf.extensionsRequired.length) || (gltf.extensionsUsed && gltf.extensionsUsed.length)) {
+        // If compressed extensions are used, this minimal loader can't decode them.
+        const used = gltf.extensionsUsed || [];
+        const req = gltf.extensionsRequired || [];
+        const list = Array.from(new Set([...used, ...req]));
+        if (list.length) {
+          throw new Error("Unsupported glTF extensions: " + list.join(", "));
+        }
+      }
 
       function accessorTypedArray(accessorIndex) {
         const acc = gltf.accessors[accessorIndex];
         const bv = gltf.bufferViews[acc.bufferView];
-        const buf = buffers[bv.buffer || 0];
         const byteOffset = (bv.byteOffset || 0) + (acc.byteOffset || 0);
         const count = acc.count;
 
@@ -126,29 +142,28 @@ function loadGLBMinimal(url) {
         else if (compType === 5121) ArrayType = Uint8Array;
         else throw new Error(`Unsupported componentType ${compType}`);
 
-        const byteStride = bv.byteStride || 0;
         const elemSize = ArrayType.BYTES_PER_ELEMENT * numComp;
 
-        if (!byteStride || byteStride === elemSize) {
-          return new ArrayType(buf, byteOffset, count * numComp);
+        if (bv.byteStride && bv.byteStride !== elemSize) {
+          // Strided data: copy to packed array
+          const out = new ArrayType(count * numComp);
+          const view = new DataView(binBuf, byteOffset, count * bv.byteStride);
+          for (let i = 0; i < count; i++) {
+            const base = i * bv.byteStride;
+            for (let c = 0; c < numComp; c++) {
+              const bo = base + c * ArrayType.BYTES_PER_ELEMENT;
+              let v;
+              if (ArrayType === Float32Array) v = view.getFloat32(bo, true);
+              else if (ArrayType === Uint16Array) v = view.getUint16(bo, true);
+              else if (ArrayType === Uint32Array) v = view.getUint32(bo, true);
+              else v = view.getUint8(bo);
+              out[i * numComp + c] = v;
+            }
+          }
+          return out;
         }
 
-        // Strided: copy to packed array
-        const out = new ArrayType(count * numComp);
-        const view = new DataView(buf, byteOffset, count * byteStride);
-        for (let i = 0; i < count; i++) {
-          const base = i * byteStride;
-          for (let c = 0; c < numComp; c++) {
-            const bo = base + c * ArrayType.BYTES_PER_ELEMENT;
-            let v;
-            if (ArrayType === Float32Array) v = view.getFloat32(bo, true);
-            else if (ArrayType === Uint16Array) v = view.getUint16(bo, true);
-            else if (ArrayType === Uint32Array) v = view.getUint32(bo, true);
-            else if (ArrayType === Uint8Array) v = view.getUint8(bo);
-            out[i * numComp + c] = v;
-          }
-        }
-        return out;
+        return new ArrayType(binBuf, byteOffset, count * numComp);
       }
 
       function buildMesh(primitive) {
@@ -158,60 +173,47 @@ function loadGLBMinimal(url) {
         if (attrs.POSITION != null) {
           const arr = accessorTypedArray(attrs.POSITION);
           geom.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+        } else {
+          throw new Error("Primitive missing POSITION");
         }
         if (attrs.NORMAL != null) {
           const arr = accessorTypedArray(attrs.NORMAL);
           geom.setAttribute("normal", new THREE.BufferAttribute(arr, 3));
-        }
-        if (attrs.TEXCOORD_0 != null) {
-          const arr = accessorTypedArray(attrs.TEXCOORD_0);
-          geom.setAttribute("uv", new THREE.BufferAttribute(arr, 2));
+        } else {
+          geom.computeVertexNormals();
         }
         if (primitive.indices != null) {
           const idxArr = accessorTypedArray(primitive.indices);
           geom.setIndex(new THREE.BufferAttribute(idxArr, 1));
-        } else {
-          geom.computeBoundingSphere();
         }
 
-        // Simple material
+        geom.computeBoundingSphere();
+
         const mat = new THREE.MeshNormalMaterial();
         return new THREE.Mesh(geom, mat);
       }
 
-      const group = new THREE.Group();
-
-      // Use default scene
-      const sceneIndex = gltf.scene ?? 0;
-      const sceneDef = gltf.scenes?.[sceneIndex];
-      if (!sceneDef) throw new Error("No default scene in glTF");
-
-      // Very small subset: nodes -> mesh -> primitives
       function buildNode(nodeIndex) {
         const nodeDef = gltf.nodes[nodeIndex];
         const nodeObj = new THREE.Group();
         nodeObj.name = nodeDef.name || `node_${nodeIndex}`;
-
-        // transform
         if (nodeDef.translation) nodeObj.position.fromArray(nodeDef.translation);
         if (nodeDef.rotation) nodeObj.quaternion.fromArray(nodeDef.rotation);
         if (nodeDef.scale) nodeObj.scale.fromArray(nodeDef.scale);
 
         if (nodeDef.mesh != null) {
           const meshDef = gltf.meshes[nodeDef.mesh];
-          for (const prim of (meshDef.primitives || [])) {
-            nodeObj.add(buildMesh(prim));
-          }
+          for (const prim of (meshDef.primitives || [])) nodeObj.add(buildMesh(prim));
         }
-        if (nodeDef.children) {
-          for (const c of nodeDef.children) nodeObj.add(buildNode(c));
-        }
+        if (nodeDef.children) for (const c of nodeDef.children) nodeObj.add(buildNode(c));
         return nodeObj;
       }
 
-      for (const n of sceneDef.nodes || []) {
-        group.add(buildNode(n));
-      }
+      const group = new THREE.Group();
+      const sceneIndex = gltf.scene ?? 0;
+      const sceneDef = gltf.scenes?.[sceneIndex];
+      if (!sceneDef) throw new Error("No default scene in glTF");
+      for (const n of (sceneDef.nodes || [])) group.add(buildNode(n));
 
       resolve(group);
     } catch (e) {
@@ -336,23 +338,40 @@ function AR() {
 
       arrowGroup = makeArrowMesh();
       yawCorrector.add(arrowGroup);
+      // fallback primitive arrow
+      (function(){
+        const g = new THREE.Group();
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.07,0.6,12), new THREE.MeshNormalMaterial());
+        shaft.position.y = 0.3;
+        g.add(shaft);
+        const head = new THREE.Mesh(new THREE.ConeGeometry(0.16,0.25,16), new THREE.MeshNormalMaterial());
+        head.position.y = 0.75;
+        g.add(head);
+        g.position.y = 0.1;
+        arrowGroup.add(g);
+      })();
 
 
-      // ===== load models (minimal glb loader; no GLTFLoader dependency) =====
+
+      // ===== load models (minimal loader). If fails, keep fallback arrow mesh. =====
       (async () => {
         try {
-          arrowVisual = await loadGLBMinimal(MODEL_ARROW);
+          arrowVisual = await loadGLBMinimal(MODEL_ARROW, "arrow");
           arrowVisual.position.set(0, 0, 0);
           arrowVisual.rotation.set(0, 0, 0);
           arrowVisual.scale.set(1, 1, 1);
+          // Remove fallback geometry children if any
+          arrowGroup.clear();
           arrowGroup.add(arrowVisual);
           console.log("[MODEL] arrow loaded:", MODEL_ARROW);
         } catch (e) {
           console.warn("[MODEL] arrow load failed:", e);
+          // keep fallback arrow mesh (cylinder+cone) to not break navigation visibility
+          setNavText("モデル読込失敗：矢印（fallbackで表示）");
         }
 
         try {
-          goalPin = await loadGLBMinimal(MODEL_GOAL);
+          goalPin = await loadGLBMinimal(MODEL_GOAL, "goal");
           goalPin.position.set(0, 0.15, 0);
           goalPin.rotation.set(0, 0, 0);
           goalPin.scale.set(1, 1, 1);
@@ -361,6 +380,7 @@ function AR() {
           console.log("[MODEL] goal loaded:", MODEL_GOAL);
         } catch (e) {
           console.warn("[MODEL] goal load failed:", e);
+          setNavText("モデル読込失敗：GOAL（文字のみ）");
         }
       })();
 
