@@ -8,6 +8,9 @@
   - Subtract marker yaw so arrow faces correct world direction
 */
 
+const __BUILD_TAG__ = "2026-01-24-orientfix";
+console.log("[AR] build", __BUILD_TAG__);
+
 let scene, camera, renderer;
 let source, context;
 
