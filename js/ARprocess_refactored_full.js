@@ -8,7 +8,7 @@
   - Subtract marker yaw so arrow faces correct world direction
 */
 
-const __BUILD_TAG__ = "2026-01-24-orientfix";
+const __BUILD_TAG__ = "2026-01-24-orientfix2";
 console.log("[AR] build", __BUILD_TAG__);
 
 let scene, camera, renderer;
@@ -28,7 +28,7 @@ const MODEL_GOAL  = "models/goal_pin.glb";
 // If arrow is vertical, this +90deg around X usually lays it flat.
 const ARROW_ROT_FIX_X = Math.PI / 2;
 const ARROW_ROT_FIX_Y = 0;
-const ARROW_ROT_FIX_Z = Math.PI; // flip forward direction
+const ARROW_ROT_FIX_Z = 0; // arrow was reversed; remove 180deg flip
 // If your goal pin is lying down or upside-down, adjust these.
 const GOAL_ROT_FIX_X = -Math.PI / 2; // flip upright
 const GOAL_ROT_FIX_Y = 0;
