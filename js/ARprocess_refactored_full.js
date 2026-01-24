@@ -172,19 +172,31 @@ function loadGLBMinimal(url, label) {
         const attrs = primitive.attributes || {};
         if (attrs.POSITION != null) {
           const arr = accessorTypedArray(attrs.POSITION);
+          if (geom.setAttribute) {
           geom.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+        } else {
+          geom.addAttribute("position", new THREE.BufferAttribute(arr, 3));
+        }
         } else {
           throw new Error("Primitive missing POSITION");
         }
         if (attrs.NORMAL != null) {
           const arr = accessorTypedArray(attrs.NORMAL);
+          if (geom.setAttribute) {
           geom.setAttribute("normal", new THREE.BufferAttribute(arr, 3));
+        } else {
+          geom.addAttribute("normal", new THREE.BufferAttribute(arr, 3));
+        }
         } else {
           geom.computeVertexNormals();
         }
         if (primitive.indices != null) {
           const idxArr = accessorTypedArray(primitive.indices);
+          if (geom.setIndex) {
           geom.setIndex(new THREE.BufferAttribute(idxArr, 1));
+        } else {
+          geom.addAttribute("index", new THREE.BufferAttribute(idxArr, 1));
+        }
         }
 
         geom.computeBoundingSphere();
