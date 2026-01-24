@@ -20,6 +20,12 @@ const YAW_OFFSET = 0;
 // ===== models (local files) =====
 const MODEL_ARROW = "models/nav_arrow.glb";
 const MODEL_GOAL  = "models/goal_pin.glb";
+
+// Arrow model orientation fix (adjust if arrow stands upright / sideways)
+// If arrow is vertical, this +90deg around X usually lays it flat.
+const ARROW_ROT_FIX_X = Math.PI / 2;
+const ARROW_ROT_FIX_Y = 0;
+const ARROW_ROT_FIX_Z = 0;
 // If your goal pin is lying down or upside-down, adjust these.
 const GOAL_ROT_FIX_X = Math.PI / 2;
 const GOAL_ROT_FIX_Y = 0;
@@ -376,7 +382,7 @@ function AR() {
         try {
           arrowVisual = await loadGLBMinimal(MODEL_ARROW, "arrow");
           arrowVisual.position.set(0, 0, 0);
-          arrowVisual.rotation.set(0, 0, 0);
+          arrowVisual.rotation.set(ARROW_ROT_FIX_X, ARROW_ROT_FIX_Y, ARROW_ROT_FIX_Z);
           arrowVisual.scale.set(1, 1, 1);
           // Remove fallback geometry children if any
           while (arrowGroup.children.length) { arrowGroup.remove(arrowGroup.children[0]); }
