@@ -17,9 +17,9 @@ const SAME_FLOOR_ONLY = false;
 // Adjust if your printed marker "front" differs from grid up-direction
 const YAW_OFFSET = 0;
 
-// ===== glb models =====
-const MODEL_ARROW = new URL("models/nav_arrow.glb", window.location.href).href;
-const MODEL_GOAL  = new URL("models/goal_pin.glb", window.location.href).href;
+// ===== models (local files) =====
+const MODEL_ARROW = "models/nav_arrow.glb";
+const MODEL_GOAL  = "models/goal_pin.glb";
 
 
 const lastSeenAt = new Map();
@@ -66,46 +66,154 @@ window.setGoalNode = function (nodeId) {
   }
 };
 
-function loadGLB(url) {
+function loadGLBMinimal(url) {
+  // Minimal GLB (glTF 2.0) loader for simple meshes (no textures/skins).
+  // Returns THREE.Group.
   return new Promise(async (resolve, reject) => {
     try {
-      if (!THREE || !THREE.GLTFLoader) {
-        reject(new Error("THREE.GLTFLoader is not available. Check GLTFLoader script include."));
-        return;
-      }
-      // Fetch as ArrayBuffer (avoids responseType/caching quirks)
       const bustUrl = url + (url.includes("?") ? "&" : "?") + "v=" + Date.now();
       const res = await fetch(bustUrl, { cache: "no-store" });
-      if (!res.ok) {
-        reject(new Error(`HTTP ${res.status} while fetching ${url}`));
-        return;
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status} while fetching ${bustUrl}`);
       const arrayBuffer = await res.arrayBuffer();
 
-      // Debug: inspect header
       const u8 = new Uint8Array(arrayBuffer);
-      const head = Array.from(u8.slice(0, 16)).map(b => b.toString(16).padStart(2,"0")).join(" ");
       const magic = String.fromCharCode(u8[0]||0, u8[1]||0, u8[2]||0, u8[3]||0);
-      console.log("[MODEL] fetch ok:", { url: bustUrl, status: res.status, type: res.headers.get("content-type"), bytes: u8.byteLength, magic, head });
+      if (magic !== "glTF") throw new Error(`Not a GLB (magic=${magic})`);
 
-      
-      // Debug: parse GLB header (little-endian)
       const dv = new DataView(arrayBuffer);
       const version = dv.getUint32(4, true);
-      const totalLen = dv.getUint32(8, true);
-      console.log("[MODEL] glb header:", { version, totalLen, byteLength: u8.byteLength });
+      if (version !== 2) throw new Error(`Unsupported GLB version ${version}`);
 
-      if (totalLen !== u8.byteLength) {
-        console.warn("[MODEL] WARNING: downloaded size != header length. File may be truncated or cached incorrectly.");
+      // Parse chunks
+      let offset = 12;
+      let jsonChunk = null;
+      let binChunk = null;
+      while (offset + 8 <= u8.byteLength) {
+        const chunkLen  = dv.getUint32(offset, true);
+        const chunkType = dv.getUint32(offset + 4, true);
+        offset += 8;
+        const chunkData = u8.slice(offset, offset + chunkLen);
+        offset += chunkLen;
+
+        // JSON = 0x4E4F534A, BIN = 0x004E4942 (stored as uint32 little-endian)
+        if (chunkType === 0x4E4F534A) jsonChunk = chunkData;
+        else if (chunkType === 0x004E4942) binChunk = chunkData;
       }
-if (magic !== "glTF") {
-        throw new Error(`Downloaded file is not a .glb (magic=${magic}). First16=${head}`);
+      if (!jsonChunk) throw new Error("GLB missing JSON chunk");
+      const gltf = JSON.parse(new TextDecoder("utf-8").decode(jsonChunk));
+
+      const buffers = [];
+      buffers[0] = binChunk ? binChunk.buffer.slice(binChunk.byteOffset, binChunk.byteOffset + binChunk.byteLength) : null;
+
+      function accessorTypedArray(accessorIndex) {
+        const acc = gltf.accessors[accessorIndex];
+        const bv = gltf.bufferViews[acc.bufferView];
+        const buf = buffers[bv.buffer || 0];
+        const byteOffset = (bv.byteOffset || 0) + (acc.byteOffset || 0);
+        const count = acc.count;
+
+        const compType = acc.componentType;
+        const type = acc.type;
+
+        const typeToNum = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
+        const numComp = typeToNum[type];
+        if (!numComp) throw new Error(`Unsupported accessor type ${type}`);
+
+        let ArrayType;
+        if (compType === 5126) ArrayType = Float32Array;
+        else if (compType === 5123) ArrayType = Uint16Array;
+        else if (compType === 5125) ArrayType = Uint32Array;
+        else if (compType === 5121) ArrayType = Uint8Array;
+        else throw new Error(`Unsupported componentType ${compType}`);
+
+        const byteStride = bv.byteStride || 0;
+        const elemSize = ArrayType.BYTES_PER_ELEMENT * numComp;
+
+        if (!byteStride || byteStride === elemSize) {
+          return new ArrayType(buf, byteOffset, count * numComp);
+        }
+
+        // Strided: copy to packed array
+        const out = new ArrayType(count * numComp);
+        const view = new DataView(buf, byteOffset, count * byteStride);
+        for (let i = 0; i < count; i++) {
+          const base = i * byteStride;
+          for (let c = 0; c < numComp; c++) {
+            const bo = base + c * ArrayType.BYTES_PER_ELEMENT;
+            let v;
+            if (ArrayType === Float32Array) v = view.getFloat32(bo, true);
+            else if (ArrayType === Uint16Array) v = view.getUint16(bo, true);
+            else if (ArrayType === Uint32Array) v = view.getUint32(bo, true);
+            else if (ArrayType === Uint8Array) v = view.getUint8(bo);
+            out[i * numComp + c] = v;
+          }
+        }
+        return out;
       }
 
+      function buildMesh(primitive) {
+        const geom = new THREE.BufferGeometry();
 
-      const loader = new THREE.GLTFLoader();
-      const basePath = url.replace(/[^\/]*$/, "");
-      loader.parse(arrayBuffer, basePath, (gltf) => resolve(gltf), (err) => reject(err));
+        const attrs = primitive.attributes || {};
+        if (attrs.POSITION != null) {
+          const arr = accessorTypedArray(attrs.POSITION);
+          geom.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+        }
+        if (attrs.NORMAL != null) {
+          const arr = accessorTypedArray(attrs.NORMAL);
+          geom.setAttribute("normal", new THREE.BufferAttribute(arr, 3));
+        }
+        if (attrs.TEXCOORD_0 != null) {
+          const arr = accessorTypedArray(attrs.TEXCOORD_0);
+          geom.setAttribute("uv", new THREE.BufferAttribute(arr, 2));
+        }
+        if (primitive.indices != null) {
+          const idxArr = accessorTypedArray(primitive.indices);
+          geom.setIndex(new THREE.BufferAttribute(idxArr, 1));
+        } else {
+          geom.computeBoundingSphere();
+        }
+
+        // Simple material
+        const mat = new THREE.MeshNormalMaterial();
+        return new THREE.Mesh(geom, mat);
+      }
+
+      const group = new THREE.Group();
+
+      // Use default scene
+      const sceneIndex = gltf.scene ?? 0;
+      const sceneDef = gltf.scenes?.[sceneIndex];
+      if (!sceneDef) throw new Error("No default scene in glTF");
+
+      // Very small subset: nodes -> mesh -> primitives
+      function buildNode(nodeIndex) {
+        const nodeDef = gltf.nodes[nodeIndex];
+        const nodeObj = new THREE.Group();
+        nodeObj.name = nodeDef.name || `node_${nodeIndex}`;
+
+        // transform
+        if (nodeDef.translation) nodeObj.position.fromArray(nodeDef.translation);
+        if (nodeDef.rotation) nodeObj.quaternion.fromArray(nodeDef.rotation);
+        if (nodeDef.scale) nodeObj.scale.fromArray(nodeDef.scale);
+
+        if (nodeDef.mesh != null) {
+          const meshDef = gltf.meshes[nodeDef.mesh];
+          for (const prim of (meshDef.primitives || [])) {
+            nodeObj.add(buildMesh(prim));
+          }
+        }
+        if (nodeDef.children) {
+          for (const c of nodeDef.children) nodeObj.add(buildNode(c));
+        }
+        return nodeObj;
+      }
+
+      for (const n of sceneDef.nodes || []) {
+        group.add(buildNode(n));
+      }
+
+      resolve(group);
     } catch (e) {
       reject(e);
     }
@@ -113,8 +221,6 @@ if (magic !== "glTF") {
 }
 
 function makeArrowMesh() {
-  // Container group rotated to lie flat on marker plane.
-  // The loaded glb arrow will be attached under this group as 'arrowVisual'.
   const group = new THREE.Group();
   group.rotation.x = -Math.PI / 2;
   group.position.y = 0.08;
@@ -232,32 +338,26 @@ function AR() {
       yawCorrector.add(arrowGroup);
 
 
-      // ===== load glb models (arrow + goal) =====
+      // ===== load models (minimal glb loader; no GLTFLoader dependency) =====
       (async () => {
         try {
-          const gltfArrow = await loadGLB(MODEL_ARROW);
-          arrowVisual = gltfArrow.scene || (gltfArrow.scenes && gltfArrow.scenes[0]);
-          if (arrowVisual) {
-            arrowVisual.position.set(0, 0, 0);
-            arrowVisual.rotation.set(0, 0, 0);
-            arrowVisual.scale.set(1, 1, 1);
-            arrowGroup.add(arrowVisual);
-          }
+          arrowVisual = await loadGLBMinimal(MODEL_ARROW);
+          arrowVisual.position.set(0, 0, 0);
+          arrowVisual.rotation.set(0, 0, 0);
+          arrowVisual.scale.set(1, 1, 1);
+          arrowGroup.add(arrowVisual);
           console.log("[MODEL] arrow loaded:", MODEL_ARROW);
         } catch (e) {
           console.warn("[MODEL] arrow load failed:", e);
         }
 
         try {
-          const gltfGoal = await loadGLB(MODEL_GOAL);
-          goalPin = gltfGoal.scene || (gltfGoal.scenes && gltfGoal.scenes[0]);
-          if (goalPin) {
-            goalPin.position.set(0, 0.15, 0);
-            goalPin.rotation.set(0, 0, 0);
-            goalPin.scale.set(1, 1, 1);
-            goalPin.visible = false;
-            holdGroup.add(goalPin);
-          }
+          goalPin = await loadGLBMinimal(MODEL_GOAL);
+          goalPin.position.set(0, 0.15, 0);
+          goalPin.rotation.set(0, 0, 0);
+          goalPin.scale.set(1, 1, 1);
+          goalPin.visible = false;
+          holdGroup.add(goalPin);
           console.log("[MODEL] goal loaded:", MODEL_GOAL);
         } catch (e) {
           console.warn("[MODEL] goal load failed:", e);
@@ -301,6 +401,7 @@ function AR() {
           }
 
           currentNodeId = bestId;
+
           // 現在地HUD：新しく認識されたマーカーで更新（次に別マーカーを見るまで保持）
           if (currentNodeId != null) {
             const isVisibleNow = (markerRoots.get(currentNodeId)?.visible === true);
@@ -330,7 +431,6 @@ function AR() {
                     const next = window.Route.nextNode(path, currentNodeId);
                     if (next != null) {
                       arrowGroup.visible = true;
-                if (goalPin) goalPin.visible = false;
                       if (goalPin) goalPin.visible = false;
                       const worldYaw = computeWorldYaw(currentNodeId, next);
                       if (worldYaw != null) {
@@ -346,7 +446,6 @@ function AR() {
                 }
               } else {
                 arrowGroup.visible = true;
-                if (goalPin) goalPin.visible = false;
               }
             } else {
               holdGroup.visible = false;
