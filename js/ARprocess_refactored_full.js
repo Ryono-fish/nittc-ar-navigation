@@ -25,9 +25,9 @@ const MODEL_GOAL  = "models/goal_pin.glb";
 // If arrow is vertical, this +90deg around X usually lays it flat.
 const ARROW_ROT_FIX_X = Math.PI / 2;
 const ARROW_ROT_FIX_Y = 0;
-const ARROW_ROT_FIX_Z = 0;
+const ARROW_ROT_FIX_Z = Math.PI; // flip forward direction
 // If your goal pin is lying down or upside-down, adjust these.
-const GOAL_ROT_FIX_X = Math.PI / 2;
+const GOAL_ROT_FIX_X = -Math.PI / 2; // flip upright
 const GOAL_ROT_FIX_Y = 0;
 const GOAL_ROT_FIX_Z = 0;
 
